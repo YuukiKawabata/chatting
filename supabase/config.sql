@@ -147,6 +147,48 @@ CREATE POLICY "Users can view all presence" ON user_presence FOR SELECT TO authe
 CREATE POLICY "Users can update own presence" ON user_presence FOR ALL
     USING (user_id = auth.uid());
 
+-- user_push_tokens テーブル (プッシュ通知用)
+CREATE TABLE user_push_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL,
+    platform VARCHAR(10) NOT NULL, -- 'ios', 'android', 'web'
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, token)
+);
+
+-- notification_settings テーブル (通知設定)
+CREATE TABLE notification_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+    enable_messages BOOLEAN DEFAULT true,
+    enable_reactions BOOLEAN DEFAULT true,
+    enable_touch_notifications BOOLEAN DEFAULT true,
+    enable_sound BOOLEAN DEFAULT true,
+    quiet_hours_start TIME,
+    quiet_hours_end TIME,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 追加インデックス
+CREATE INDEX idx_user_push_tokens_user_id ON user_push_tokens(user_id);
+CREATE INDEX idx_notification_settings_user_id ON notification_settings(user_id);
+
+-- 追加のRLS設定
+ALTER TABLE user_push_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_settings ENABLE ROW LEVEL SECURITY;
+
+-- user_push_tokens ポリシー
+CREATE POLICY "Users can manage own push tokens" ON user_push_tokens FOR ALL
+    USING (user_id = auth.uid());
+
+-- notification_settings ポリシー
+CREATE POLICY "Users can manage own notification settings" ON notification_settings FOR ALL
+    USING (user_id = auth.uid());
+
 -- 自動更新タイムスタンプ関数
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$

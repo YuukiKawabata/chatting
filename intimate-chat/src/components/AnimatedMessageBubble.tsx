@@ -1,5 +1,12 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+  Easing,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { Database } from '../lib/supabase';
@@ -29,43 +36,77 @@ type Theme = {
   };
 };
 
-interface MessageBubbleProps {
+interface AnimatedMessageBubbleProps {
   message: Message;
   isOwn: boolean;
   theme: Theme;
   onReaction?: (messageId: string) => void;
+  isNew?: boolean;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
+export const AnimatedMessageBubble: React.FC<AnimatedMessageBubbleProps> = ({
   message,
   isOwn,
   theme,
   onReaction,
+  isNew = false,
 }) => {
+  // アニメーション値
+  const slideAnim = useRef(new Animated.Value(isNew ? 50 : 0)).current;
+  const fadeAnim = useRef(new Animated.Value(isNew ? 0 : 1)).current;
+  const scaleAnim = useRef(new Animated.Value(isNew ? 0.8 : 1)).current;
+  const reactionScaleAnim = useRef(new Animated.Value(1)).current;
+
+  // 新しいメッセージのエントランスアニメーション
+  useEffect(() => {
+    if (isNew) {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 80,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isNew, slideAnim, fadeAnim, scaleAnim]);
+
+  // リアクションアニメーション
+  const animateReaction = () => {
+    Animated.sequence([
+      Animated.timing(reactionScaleAnim, {
+        toValue: 1.2,
+        duration: 150,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(reactionScaleAnim, {
+        toValue: 1,
+        tension: 300,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('ja-JP', { 
       hour: '2-digit', 
       minute: '2-digit' 
     }).format(date);
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return '今日';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return '昨日';
-    } else {
-      return new Intl.DateTimeFormat('ja-JP', {
-        month: 'numeric',
-        day: 'numeric'
-      }).format(date);
-    }
   };
 
   const getReactionEmoji = (type: string) => {
@@ -111,7 +152,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const renderMessageContent = () => {
     switch (message.message_type) {
       case 'touch':
-        // タッチ位置メッセージ
         return (
           <View style={styles.touchMessage}>
             <Feather name="navigation" size={16} color={isOwn ? '#FFFFFF' : theme.colors.primary} />
@@ -122,7 +162,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         );
       
       case 'image':
-        // 画像メッセージ（将来の実装）
         return (
           <View style={styles.imageMessage}>
             <Feather name="image" size={16} color={isOwn ? '#FFFFFF' : theme.colors.primary} />
@@ -133,7 +172,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         );
       
       case 'file':
-        // ファイルメッセージ（将来の実装）
         return (
           <View style={styles.fileMessage}>
             <Feather name="file" size={16} color={isOwn ? '#FFFFFF' : theme.colors.primary} />
@@ -144,13 +182,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         );
       
       default:
-        // テキストメッセージ
         return (
           <Text style={[styles.messageText, { color: isOwn ? '#FFFFFF' : theme.colors.text.primary }]}>
             {message.content}
           </Text>
         );
     }
+  };
+
+  const handleReactionPress = () => {
+    animateReaction();
+    onReaction?.(message.id);
   };
 
   const bubbleStyle = {
@@ -160,10 +202,22 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const reactions = aggregateReactions();
 
   return (
-    <View style={[styles.container, { alignItems: isOwn ? 'flex-end' : 'flex-start' }]}>
+    <Animated.View 
+      style={[
+        styles.container, 
+        { 
+          alignItems: isOwn ? 'flex-end' : 'flex-start',
+          opacity: fadeAnim,
+          transform: [
+            { translateY: slideAnim },
+            { scale: scaleAnim }
+          ]
+        }
+      ]}
+    >
       <TouchableOpacity
         style={[styles.bubbleContainer, bubbleStyle]}
-        onLongPress={() => onReaction?.(message.id)}
+        onLongPress={handleReactionPress}
         activeOpacity={0.8}
       >
         {/* メッセージバブル */}
@@ -191,7 +245,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {/* リアクション表示 */}
         {reactions.length > 0 && (
-          <View style={[styles.reactionsContainer, { alignSelf: isOwn ? 'flex-end' : 'flex-start' }]}>
+          <Animated.View 
+            style={[
+              styles.reactionsContainer, 
+              { 
+                alignSelf: isOwn ? 'flex-end' : 'flex-start',
+                transform: [{ scale: reactionScaleAnim }]
+              }
+            ]}
+          >
             {reactions.map((reaction) => (
               <TouchableOpacity
                 key={reaction.type}
@@ -199,7 +261,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   styles.reactionBubble,
                   { backgroundColor: theme.colors.background.card, borderColor: theme.colors.border }
                 ]}
-                onPress={() => onReaction?.(message.id)}
+                onPress={handleReactionPress}
+                activeOpacity={0.8}
               >
                 <Text style={styles.reactionEmoji}>
                   {getReactionEmoji(reaction.type)}
@@ -211,7 +274,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 )}
               </TouchableOpacity>
             ))}
-          </View>
+          </Animated.View>
         )}
       </TouchableOpacity>
       
@@ -240,7 +303,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {!isOwn && onReaction && (
         <TouchableOpacity
           style={[styles.reactionButton, { backgroundColor: theme.colors.background.card }]}
-          onPress={() => onReaction(message.id)}
+          onPress={handleReactionPress}
         >
           <Feather 
             name="plus" 
@@ -249,7 +312,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           />
         </TouchableOpacity>
       )}
-    </View>
+    </Animated.View>
   );
 };
 
@@ -329,6 +392,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderWidth: 1,
     gap: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   reactionEmoji: {
     fontSize: 14,

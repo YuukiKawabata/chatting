@@ -10,6 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -18,41 +19,170 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 
-export const LoginScreen: React.FC = () => {
-  const [email, setEmail] = useState('demo@example.com');
-  const [password, setPassword] = useState('password');
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+type AuthMode = 'login' | 'register';
 
-  const { login } = useAuth();
+export const LoginScreen: React.FC = () => {
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    username: '',
+    displayName: '',
+    confirmPassword: '',
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const { login, register, isLoading, resetPassword } = useAuth();
   const { theme, currentTheme } = useTheme();
 
+  const handleAuth = async () => {
+    if (authMode === 'login') {
+      await handleLogin();
+    } else {
+      await handleRegister();
+    }
+  };
+
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
+    if (!formData.email.trim() || !formData.password.trim()) {
       Alert.alert('エラー', 'メールアドレスとパスワードを入力してください');
       return;
     }
 
-    setIsLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      await login(email.trim(), password);
+      await login(formData.email.trim(), formData.password);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(
-        'ログインエラー', 
-        error.message || 'ログインに失敗しました。メールアドレスとパスワードを確認してください。'
-      );
-    } finally {
-      setIsLoading(false);
+      
+      // Supabaseエラーメッセージの日本語化
+      let errorMessage = 'ログインに失敗しました';
+      if (error.message?.includes('Invalid login credentials')) {
+        errorMessage = 'メールアドレスまたはパスワードが正しくありません';
+      } else if (error.message?.includes('Email not confirmed')) {
+        errorMessage = 'メールアドレスの確認が必要です';
+      } else if (error.message?.includes('Too many requests')) {
+        errorMessage = 'リクエストが多すぎます。しばらく待ってから再試行してください';
+      }
+      
+      Alert.alert('ログインエラー', errorMessage);
     }
+  };
+
+  const handleRegister = async () => {
+    // バリデーション
+    if (!formData.email.trim() || !formData.password.trim() || !formData.username.trim()) {
+      Alert.alert('エラー', '必須項目をすべて入力してください');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      Alert.alert('エラー', 'パスワードが一致しません');
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      Alert.alert('エラー', 'パスワードは6文字以上で入力してください');
+      return;
+    }
+
+    if (formData.username.length < 3) {
+      Alert.alert('エラー', 'ユーザー名は3文字以上で入力してください');
+      return;
+    }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    try {
+      await register({
+        email: formData.email.trim(),
+        password: formData.password,
+        username: formData.username.trim(),
+        displayName: formData.displayName.trim() || formData.username.trim(),
+      });
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        '登録完了', 
+        'アカウントが正常に作成されました！',
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      
+      // Supabaseエラーメッセージの日本語化
+      let errorMessage = 'アカウント作成に失敗しました';
+      if (error.message?.includes('User already registered')) {
+        errorMessage = 'このメールアドレスは既に登録されています';
+      } else if (error.message?.includes('Password should be at least 6 characters')) {
+        errorMessage = 'パスワードは6文字以上で設定してください';
+      } else if (error.message?.includes('duplicate key value violates unique constraint')) {
+        errorMessage = 'このユーザー名は既に使用されています';
+      }
+      
+      Alert.alert('登録エラー', errorMessage);
+    }
+  };
+
+  const handlePasswordReset = () => {
+    if (!formData.email.trim()) {
+      Alert.alert('エラー', 'メールアドレスを入力してください');
+      return;
+    }
+
+    Alert.alert(
+      'パスワードリセット',
+      `${formData.email} にパスワードリセットのメールを送信しますか？`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '送信',
+          onPress: async () => {
+            try {
+              await resetPassword(formData.email.trim());
+              Alert.alert(
+                '送信完了',
+                'パスワードリセットのメールを送信しました。メールをご確認ください。'
+              );
+            } catch (error: any) {
+              Alert.alert('エラー', 'パスワードリセットメールの送信に失敗しました');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const toggleAuthMode = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setAuthMode(authMode === 'login' ? 'register' : 'login');
+    // フォームをリセット
+    setFormData({
+      email: '',
+      password: '',
+      username: '',
+      displayName: '',
+      confirmPassword: '',
+    });
+    setShowPassword(false);
+    setShowConfirmPassword(false);
   };
 
   const togglePasswordVisibility = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowPassword(!showPassword);
+  };
+
+  const toggleConfirmPasswordVisibility = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowConfirmPassword(!showConfirmPassword);
+  };
+
+  const updateFormData = (field: keyof typeof formData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -74,7 +204,10 @@ export const LoginScreen: React.FC = () => {
             style={styles.keyboardView}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            <View style={styles.content}>
+            <ScrollView 
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
               {/* Header */}
               <View style={styles.header}>
                 <LinearGradient
@@ -92,11 +225,44 @@ export const LoginScreen: React.FC = () => {
                 </Text>
               </View>
 
-              {/* Login Form */}
+              {/* Auth Form */}
               <View style={[styles.form, { backgroundColor: theme.colors.background.card }]}>
+                {/* Mode Switcher */}
+                <View style={styles.modeSwitcher}>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeButton,
+                      authMode === 'login' && { backgroundColor: theme.colors.primary + '20' }
+                    ]}
+                    onPress={() => authMode !== 'login' && toggleAuthMode()}
+                  >
+                    <Text style={[
+                      styles.modeButtonText,
+                      { color: authMode === 'login' ? theme.colors.primary : theme.colors.text.secondary }
+                    ]}>
+                      ログイン
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeButton,
+                      authMode === 'register' && { backgroundColor: theme.colors.primary + '20' }
+                    ]}
+                    onPress={() => authMode !== 'register' && toggleAuthMode()}
+                  >
+                    <Text style={[
+                      styles.modeButtonText,
+                      { color: authMode === 'register' ? theme.colors.primary : theme.colors.text.secondary }
+                    ]}>
+                      新規登録
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Email Input */}
                 <View style={styles.inputGroup}>
                   <Text style={[styles.label, { color: theme.colors.text.primary }]}>
-                    メールアドレス
+                    メールアドレス*
                   </Text>
                   <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
                     <Feather 
@@ -107,9 +273,9 @@ export const LoginScreen: React.FC = () => {
                     />
                     <TextInput
                       style={[styles.input, { color: theme.colors.text.primary }]}
-                      value={email}
-                      onChangeText={setEmail}
-                      placeholder="メールアドレスを入力"
+                      value={formData.email}
+                      onChangeText={(value) => updateFormData('email', value)}
+                      placeholder="example@email.com"
                       placeholderTextColor={theme.colors.text.secondary}
                       keyboardType="email-address"
                       autoCapitalize="none"
@@ -119,9 +285,64 @@ export const LoginScreen: React.FC = () => {
                   </View>
                 </View>
 
+                {/* Username Input (Register only) */}
+                {authMode === 'register' && (
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: theme.colors.text.primary }]}>
+                      ユーザー名*
+                    </Text>
+                    <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
+                      <Feather 
+                        name="user" 
+                        size={20} 
+                        color={theme.colors.text.secondary} 
+                        style={styles.inputIcon}
+                      />
+                      <TextInput
+                        style={[styles.input, { color: theme.colors.text.primary }]}
+                        value={formData.username}
+                        onChangeText={(value) => updateFormData('username', value)}
+                        placeholder="ユーザー名 (3文字以上)"
+                        placeholderTextColor={theme.colors.text.secondary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        editable={!isLoading}
+                        maxLength={20}
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {/* Display Name Input (Register only) */}
+                {authMode === 'register' && (
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: theme.colors.text.primary }]}>
+                      表示名
+                    </Text>
+                    <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
+                      <Feather 
+                        name="edit-3" 
+                        size={20} 
+                        color={theme.colors.text.secondary} 
+                        style={styles.inputIcon}
+                      />
+                      <TextInput
+                        style={[styles.input, { color: theme.colors.text.primary }]}
+                        value={formData.displayName}
+                        onChangeText={(value) => updateFormData('displayName', value)}
+                        placeholder="表示名 (省略可)"
+                        placeholderTextColor={theme.colors.text.secondary}
+                        editable={!isLoading}
+                        maxLength={30}
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {/* Password Input */}
                 <View style={styles.inputGroup}>
                   <Text style={[styles.label, { color: theme.colors.text.primary }]}>
-                    パスワード
+                    パスワード*
                   </Text>
                   <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
                     <Feather 
@@ -132,9 +353,9 @@ export const LoginScreen: React.FC = () => {
                     />
                     <TextInput
                       style={[styles.input, { color: theme.colors.text.primary }]}
-                      value={password}
-                      onChangeText={setPassword}
-                      placeholder="パスワードを入力"
+                      value={formData.password}
+                      onChangeText={(value) => updateFormData('password', value)}
+                      placeholder={authMode === 'register' ? "パスワード (6文字以上)" : "パスワード"}
                       placeholderTextColor={theme.colors.text.secondary}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
@@ -155,15 +376,55 @@ export const LoginScreen: React.FC = () => {
                   </View>
                 </View>
 
+                {/* Confirm Password Input (Register only) */}
+                {authMode === 'register' && (
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: theme.colors.text.primary }]}>
+                      パスワード確認*
+                    </Text>
+                    <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
+                      <Feather 
+                        name="lock" 
+                        size={20} 
+                        color={theme.colors.text.secondary} 
+                        style={styles.inputIcon}
+                      />
+                      <TextInput
+                        style={[styles.input, { color: theme.colors.text.primary }]}
+                        value={formData.confirmPassword}
+                        onChangeText={(value) => updateFormData('confirmPassword', value)}
+                        placeholder="パスワードを再入力"
+                        placeholderTextColor={theme.colors.text.secondary}
+                        secureTextEntry={!showConfirmPassword}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        editable={!isLoading}
+                      />
+                      <TouchableOpacity
+                        onPress={toggleConfirmPasswordVisibility}
+                        style={styles.eyeButton}
+                        disabled={isLoading}
+                      >
+                        <Feather 
+                          name={showConfirmPassword ? 'eye-off' : 'eye'} 
+                          size={20} 
+                          color={theme.colors.text.secondary} 
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Action Button */}
                 <TouchableOpacity
                   style={[
-                    styles.loginButton,
+                    styles.actionButton,
                     { 
                       backgroundColor: isLoading ? theme.colors.text.secondary : theme.colors.primary,
                       opacity: isLoading ? 0.7 : 1,
                     }
                   ]}
-                  onPress={handleLogin}
+                  onPress={handleAuth}
                   disabled={isLoading}
                   activeOpacity={0.8}
                 >
@@ -173,30 +434,55 @@ export const LoginScreen: React.FC = () => {
                         ? [theme.colors.text.secondary, theme.colors.text.secondary]
                         : [theme.colors.primary, theme.colors.secondary]
                     }
-                    style={styles.loginButtonGradient}
+                    style={styles.actionButtonGradient}
                   >
-                    {isLoading ? (
-                      <View style={styles.loadingContainer}>
-                        <Text style={styles.loginButtonText}>ログイン中...</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.loginButtonText}>ログイン</Text>
-                    )}
+                    <Text style={styles.actionButtonText}>
+                      {isLoading 
+                        ? (authMode === 'login' ? 'ログイン中...' : '登録中...')
+                        : (authMode === 'login' ? 'ログイン' : 'アカウント作成')
+                      }
+                    </Text>
                   </LinearGradient>
                 </TouchableOpacity>
+
+                {/* Password Reset (Login only) */}
+                {authMode === 'login' && (
+                  <TouchableOpacity
+                    style={styles.forgotPassword}
+                    onPress={handlePasswordReset}
+                    disabled={isLoading}
+                  >
+                    <Text style={[styles.forgotPasswordText, { color: theme.colors.primary }]}>
+                      パスワードを忘れた場合
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
-              {/* Demo Info */}
-              <View style={[styles.demoInfo, { backgroundColor: theme.colors.background.card }]}>
-                <Text style={[styles.demoTitle, { color: theme.colors.text.primary }]}>
-                  デモアカウント
-                </Text>
-                <Text style={[styles.demoText, { color: theme.colors.text.secondary }]}>
-                  Email: demo@example.com{'\n'}
-                  Password: password
-                </Text>
-              </View>
-            </View>
+              {/* Demo Info (Login only) */}
+              {authMode === 'login' && (
+                <View style={[styles.demoInfo, { backgroundColor: theme.colors.background.card }]}>
+                  <Text style={[styles.demoTitle, { color: theme.colors.text.primary }]}>
+                    デモアカウント
+                  </Text>
+                  <Text style={[styles.demoText, { color: theme.colors.text.secondary }]}>
+                    Email: demo@example.com{'\n'}
+                    Password: password
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.useDemoButton}
+                    onPress={() => {
+                      updateFormData('email', 'demo@example.com');
+                      updateFormData('password', 'password');
+                    }}
+                  >
+                    <Text style={[styles.useDemoText, { color: theme.colors.primary }]}>
+                      デモアカウントを使用
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>
 
@@ -228,14 +514,15 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 32,
   },
   logo: {
     width: 80,
@@ -277,6 +564,23 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  modeSwitcher: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 24,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
   inputGroup: {
     marginBottom: 20,
   },
@@ -291,7 +595,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    height: 52,
   },
   inputIcon: {
     marginRight: 12,
@@ -299,29 +603,35 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    height: 24,
+    height: '100%',
+    textAlignVertical: 'center',
   },
   eyeButton: {
     padding: 4,
   },
-  loginButton: {
+  actionButton: {
     borderRadius: 12,
     overflow: 'hidden',
     marginTop: 8,
   },
-  loginButtonGradient: {
+  actionButtonGradient: {
     paddingVertical: 16,
     paddingHorizontal: 24,
     alignItems: 'center',
   },
-  loginButtonText: {
+  actionButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
   },
-  loadingContainer: {
-    flexDirection: 'row',
+  forgotPassword: {
     alignItems: 'center',
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   demoInfo: {
     borderRadius: 12,
@@ -337,6 +647,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 12,
+  },
+  useDemoButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  useDemoText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   backgroundDecoration1: {
     position: 'absolute',

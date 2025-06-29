@@ -78,7 +78,7 @@ export interface TouchPosition {
   userId: string;
 }
 
-export type ThemeName = 'cute' | 'cool' | 'minimal' | 'warm';
+export type ThemeName = 'cute' | 'cool' | 'minimal' | 'warm' | 'romantic' | 'galaxy' | 'forest' | 'sunset';
 
 export interface Theme {
   name: string;

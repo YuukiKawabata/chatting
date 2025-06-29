@@ -153,6 +153,61 @@ export type Database = {
           created_at?: string;
         };
       };
+      typing_status: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          room_id: string | null;
+          content: string | null;
+          is_typing: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          room_id?: string | null;
+          content?: string | null;
+          is_typing?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          room_id?: string | null;
+          content?: string | null;
+          is_typing?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      user_presence: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          is_online: boolean;
+          last_seen_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          is_online?: boolean;
+          last_seen_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          is_online?: boolean;
+          last_seen_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 };

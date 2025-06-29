@@ -87,6 +87,74 @@ export const themes: Record<ThemeName, Theme> = {
       border: '#FED7AA',
     }
   }),
+  romantic: createTheme({
+    name: 'ロマンティック',
+    colors: {
+      primary: '#EC4899',
+      secondary: '#F97316',
+      success: '#10B981',
+      warning: '#F59E0B',
+      danger: '#EF4444',
+      background: {
+        primary: 'linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 50%, #FFEEF7 100%)',
+        secondary: '#FDF2F8',
+        card: 'rgba(255, 255, 255, 0.9)',
+      },
+      text: { primary: '#1F2937', secondary: '#831843', accent: '#EC4899' },
+      border: '#F9A8D4',
+    }
+  }),
+  galaxy: createTheme({
+    name: 'ギャラクシー',
+    colors: {
+      primary: '#8B5CF6',
+      secondary: '#06B6D4',
+      success: '#10B981',
+      warning: '#F59E0B',
+      danger: '#EF4444',
+      background: {
+        primary: 'linear-gradient(135deg, #0C0A09 0%, #1C1917 30%, #312E81 100%)',
+        secondary: '#1E1B4B',
+        card: 'rgba(75, 85, 99, 0.8)',
+      },
+      text: { primary: '#F3F4F6', secondary: '#A78BFA', accent: '#8B5CF6' },
+      border: '#4C1D95',
+    }
+  }),
+  forest: createTheme({
+    name: 'フォレスト',
+    colors: {
+      primary: '#16A34A',
+      secondary: '#15803D',
+      success: '#22C55E',
+      warning: '#F59E0B',
+      danger: '#EF4444',
+      background: {
+        primary: '#F0FDF4',
+        secondary: '#DCFCE7',
+        card: 'rgba(255, 255, 255, 0.85)',
+      },
+      text: { primary: '#14532D', secondary: '#166534', accent: '#16A34A' },
+      border: '#BBF7D0',
+    }
+  }),
+  sunset: createTheme({
+    name: 'サンセット',
+    colors: {
+      primary: '#F97316',
+      secondary: '#EAB308',
+      success: '#10B981',
+      warning: '#F59E0B',
+      danger: '#EF4444',
+      background: {
+        primary: 'linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 50%, #FED7AA 100%)',
+        secondary: '#FFEDD5',
+        card: 'rgba(255, 255, 255, 0.85)',
+      },
+      text: { primary: '#9A3412', secondary: '#C2410C', accent: '#F97316' },
+      border: '#FB923C',
+    }
+  }),
 };
 
 export const getTheme = (themeName: ThemeName): Theme => themes[themeName];

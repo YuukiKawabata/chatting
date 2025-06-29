@@ -10,6 +10,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Theme } from '../types';
+import { useFileUpload } from '../hooks/useFileUpload';
 
 interface InputAreaProps {
   theme: Theme;
@@ -19,6 +20,7 @@ interface InputAreaProps {
   disabled?: boolean;
   partnerTyping?: string;
   currentInput?: string;
+  roomId?: string;
 }
 
 export const InputArea: React.FC<InputAreaProps> = ({
@@ -29,10 +31,12 @@ export const InputArea: React.FC<InputAreaProps> = ({
   disabled = false,
   partnerTyping = '',
   currentInput = '',
+  roomId,
 }) => {
   const [message, setMessage] = useState('');
   const inputRef = useRef<TextInput>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const { showUploadOptions, isUploading, uploadProgress } = useFileUpload();
 
   const handleSendPress = () => {
     if (message.trim() && !disabled) {
@@ -71,6 +75,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
     handleSendPress();
   };
 
+  const handleFileUpload = () => {
+    if (!roomId || disabled || isUploading) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    showUploadOptions(roomId);
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background.card }]}>
       {/* Partner's Input Display */}
@@ -103,8 +114,48 @@ export const InputArea: React.FC<InputAreaProps> = ({
         </View>
       </View>
 
+      {/* Upload Progress Display */}
+      {isUploading && uploadProgress && (
+        <View style={[styles.progressContainer, { backgroundColor: theme.colors.background.primary }]}>
+          <Text style={[styles.progressText, { color: theme.colors.text.primary }]}>
+            アップロード中... {uploadProgress.percentage}%
+          </Text>
+          <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { 
+                  backgroundColor: theme.colors.primary,
+                  width: `${uploadProgress.percentage}%`,
+                }
+              ]} 
+            />
+          </View>
+        </View>
+      )}
+
       {/* Input Field */}
       <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
+        {/* File Upload Button */}
+        <TouchableOpacity
+          style={[
+            styles.attachButton,
+            { 
+              backgroundColor: theme.colors.background.primary,
+              borderColor: theme.colors.border,
+            }
+          ]}
+          onPress={handleFileUpload}
+          disabled={disabled || isUploading}
+          activeOpacity={0.8}
+        >
+          <Feather 
+            name={isUploading ? "upload-cloud" : "paperclip"} 
+            size={20} 
+            color={disabled || isUploading ? theme.colors.text.secondary : theme.colors.primary} 
+          />
+        </TouchableOpacity>
+
         <TextInput
           ref={inputRef}
           style={[
@@ -123,7 +174,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
           placeholderTextColor={theme.colors.text.secondary}
           multiline
           maxLength={1000}
-          editable={!disabled}
+          editable={!disabled && !isUploading}
           returnKeyType="send"
           blurOnSubmit={false}
           scrollEnabled={false}
@@ -134,13 +185,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
             style={[
               styles.sendButton,
               {
-                backgroundColor: message.trim() && !disabled 
+                backgroundColor: message.trim() && !disabled && !isUploading
                   ? theme.colors.primary 
                   : theme.colors.text.secondary,
               }
             ]}
             onPress={handleSendPress}
-            disabled={!message.trim() || disabled}
+            disabled={!message.trim() || disabled || isUploading}
             activeOpacity={0.8}
           >
             <Feather 
@@ -162,6 +213,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
     maxHeight: 300, // 最大高さを制限
+  },
+  progressContainer: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 8,
+  },
+  progressText: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   inputDisplay: {
     marginBottom: 8,
@@ -200,6 +270,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 12,
+  },
+  attachButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
   },
   textInput: {
     flex: 1,
