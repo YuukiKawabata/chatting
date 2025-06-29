@@ -113,6 +113,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
               backgroundColor: theme.colors.background.primary,
               color: theme.colors.text.primary,
               borderColor: theme.colors.border,
+              maxHeight: 100, // 入力欄の最大高さを制限
             }
           ]}
           value={message}
@@ -125,6 +126,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
           editable={!disabled}
           returnKeyType="send"
           blurOnSubmit={false}
+          scrollEnabled={false}
         />
         
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
@@ -155,17 +157,18 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    maxHeight: 300, // 最大高さを制限
   },
   inputDisplay: {
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
     borderWidth: 1,
-    minHeight: 60,
+    minHeight: 48,
   },
   inputLabel: {
     fontSize: 12,

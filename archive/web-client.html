@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intimate Chat - Web Client</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .login-form, .chat-container {
+            display: none;
+        }
+        .login-form.active, .chat-container.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+        input {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        .message.own {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            margin-left: auto;
+            text-align: right;
+        }
+        .message.other {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .message-input {
+            display: flex;
+            gap: 10px;
+        }
+        .message-input input {
+            flex: 1;
+        }
+        .message-input button {
+            width: auto;
+            padding: 12px 20px;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        .typing {
+            font-style: italic;
+            opacity: 0.7;
+            font-size: 14px;
+        }
+        .demo-accounts {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .demo-accounts h3 {
+            margin-top: 0;
+            font-size: 16px;
+        }
+        .demo-accounts p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💕 Intimate Chat - Web Client</h1>
+        
+        <!-- Login Form -->
+        <div class="login-form active" id="loginForm">
+            <div class="demo-accounts">
+                <h3>🎭 デモアカウント</h3>
+                <p><strong>ユーザー1:</strong> demo@example.com / password</p>
+                <p><strong>ユーザー2:</strong> partner@example.com / password</p>
+            </div>
+            
+            <form id="login">
+                <div class="form-group">
+                    <label for="email">メールアドレス</label>
+                    <input type="email" id="email" value="partner@example.com" placeholder="メールアドレス" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">パスワード</label>
+                    <input type="password" id="password" value="password" placeholder="パスワード" required>
+                </div>
+                <button type="submit">ログイン</button>
+            </form>
+        </div>
+
+        <!-- Chat Container -->
+        <div class="chat-container" id="chatContainer">
+            <div class="status" id="status">接続中...</div>
+            <div class="messages" id="messages"></div>
+            <div class="typing" id="typing"></div>
+            <div class="message-input">
+                <input type="text" id="messageInput" placeholder="メッセージを入力..." maxlength="1000">
+                <button onclick="sendMessage()">送信</button>
+            </div>
+            <button onclick="logout()" style="margin-top: 10px; background: linear-gradient(45deg, #666, #555);">ログアウト</button>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let currentUser = null;
+        let token = null;
+
+        // Login
+        document.getElementById('login').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('http://192.168.0.195:3001/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    currentUser = data.user;
+                    token = data.token;
+                    document.getElementById('loginForm').classList.remove('active');
+                    document.getElementById('chatContainer').classList.add('active');
+                    connectSocket();
+                } else {
+                    alert('ログインに失敗しました: ' + data.error);
+                }
+            } catch (error) {
+                alert('ネットワークエラー: ' + error.message);
+            }
+        });
+
+        // Socket connection
+        function connectSocket() {
+            socket = io('http://192.168.0.195:3001', {
+                auth: { token: token }
+            });
+
+            socket.on('connect', () => {
+                document.getElementById('status').textContent = `✅ ${currentUser.displayName} として接続中`;
+                joinRoom();
+            });
+
+            socket.on('disconnect', () => {
+                document.getElementById('status').textContent = '❌ 接続が切断されました';
+            });
+
+            socket.on('message_received', (message) => {
+                addMessage(message.content, message.senderId === currentUser.id, message.sender?.displayName || 'Unknown');
+            });
+
+            socket.on('user_typing', (data) => {
+                if (data.userId !== currentUser.id) {
+                    document.getElementById('typing').textContent = `${data.username} が入力中...`;
+                }
+            });
+
+            socket.on('user_stopped_typing', (data) => {
+                if (data.userId !== currentUser.id) {
+                    document.getElementById('typing').textContent = '';
+                }
+            });
+
+            socket.on('error', (error) => {
+                console.error('Socket error:', error);
+            });
+        }
+
+        function joinRoom() {
+            socket.emit('join_room', { roomId: 'room_demo' });
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message && socket) {
+                socket.emit('send_message', {
+                    roomId: 'room_demo',
+                    content: message,
+                    type: 'text'
+                });
+                input.value = '';
+                stopTyping();
+            }
+        }
+
+        function addMessage(content, isOwn, senderName) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isOwn ? 'own' : 'other'}`;
+            
+            const time = new Date().toLocaleTimeString('ja-JP', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            
+            messageDiv.innerHTML = `
+                ${!isOwn ? `<small>${senderName}</small><br>` : ''}
+                ${content}
+                <br><small style="opacity: 0.7;">${time}</small>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Typing events
+        let typingTimer = null;
+        document.getElementById('messageInput').addEventListener('input', (e) => {
+            if (socket) {
+                socket.emit('typing_update', {
+                    roomId: 'room_demo',
+                    content: e.target.value
+                });
+
+                clearTimeout(typingTimer);
+                typingTimer = setTimeout(stopTyping, 1000);
+            }
+        });
+
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function stopTyping() {
+            if (socket) {
+                socket.emit('typing_stop', { roomId: 'room_demo' });
+            }
+        }
+
+        function logout() {
+            if (socket) {
+                socket.disconnect();
+            }
+            document.getElementById('chatContainer').classList.remove('active');
+            document.getElementById('loginForm').classList.add('active');
+            document.getElementById('messages').innerHTML = '';
+            currentUser = null;
+            token = null;
+        }
+    </script>
+</body>
+</html> 

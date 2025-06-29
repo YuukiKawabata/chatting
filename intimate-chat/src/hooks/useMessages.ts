@@ -2,12 +2,19 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Message, Reaction, TypingUser } from '../types';
 import { useSocket } from './useSocket';
 
-export const useMessages = (roomId: string | null) => {
+export const useMessages = (roomId: string | null, currentUserId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [typingUsers, setTypingUsers] = useState<Map<string, TypingUser>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const currentUserId = useRef<string>('user_demo'); // TODO: Get from auth context
+  const userIdRef = useRef<string>(currentUserId || 'user_demo');
+  
+  // Update userId when it changes
+  useEffect(() => {
+    if (currentUserId) {
+      userIdRef.current = currentUserId;
+    }
+  }, [currentUserId]);
   
   const {
     isConnected,
@@ -35,7 +42,9 @@ export const useMessages = (roomId: string | null) => {
     });
 
     const unsubscribeTyping = onTypingUpdate((data: { userId: string; username: string; roomId: string; content?: string }) => {
-      if (data.roomId === roomId && data.userId !== currentUserId.current) {
+      console.log('📝 Typing event received:', data, 'Current user:', userIdRef.current);
+      if (data.roomId === roomId && data.userId !== userIdRef.current) {
+        console.log('✅ Setting typing user:', data.username, 'content:', data.content);
         setTypingUsers(prev => {
           const newMap = new Map(prev);
           newMap.set(data.userId, {
@@ -46,6 +55,8 @@ export const useMessages = (roomId: string | null) => {
           });
           return newMap;
         });
+      } else {
+        console.log('❌ Typing event ignored - same user or wrong room');
       }
     });
 
@@ -160,7 +171,7 @@ export const useMessages = (roomId: string | null) => {
 
   // Get current typing users (excluding current user)
   const currentTyping = Array.from(typingUsers.values()).filter(
-    user => user.userId !== currentUserId.current
+    user => user.userId !== userIdRef.current
   );
 
   return {

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(mkdir:*)",
+      "mcp__filesystem__create_directory",
+      "mcp__filesystem__move_file",
+      "mcp__github__create_issue"
+    ],
+    "deny": []
+  },
+  "enabledMcpjsonServers": [
+    "supabase",
+    "github",
+    "filesystem"
+  ]
+}

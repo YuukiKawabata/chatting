@@ -79,4 +79,13 @@ dist/
 
 # Logs
 logs
-*.log 
+*.log
+
+# Security - MCP configs and tokens
+.mcp.json
+.mcp.local.json
+.claude/
+**/secrets.json
+**/*_token*
+**/*_key*
+**/config.local.* 

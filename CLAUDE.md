@@ -1,111 +1,679 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+ユーザーとのやり取りは日本語を使用してください。
 
-## Project Overview
+このファイルは、このリポジトリのコードを作業する際にClaude Code (claude.ai/code) にガイダンスを提供します。
 
-This is an intimate chat application consisting of:
-- **Backend**: Node.js/Express + Socket.IO server (`intimate-chat-backend.js`)
-- **Frontend**: React frontend with real-time features (`intimate-chat-frontend-realtime.tsx`)
-- **Technical Specs**: Detailed Japanese specification document (`intimate-chat-technical-specs.md`)
+## 🎯 プロジェクト概要
 
-The application features real-time messaging, reactions, typing indicators, theme switching, and unique features like touch position sharing between intimate partners.
+**親密なチャットアプリケーション** - React Native + Supabaseによるシンプル構成
 
-## Development Commands
+### 📱 **アプリケーション構成**
+- **モバイルアプリ**: React Native (Expo) - iOS/Android対応
+- **バックエンド**: Supabase (PostgreSQL + Auth + Realtime + Storage)
+- **デプロイメント**: Expo Application Services + Supabase Cloud
 
-Since no package.json files were found, this appears to be a standalone demo/prototype. To run the application:
+### 🌟 **主要機能**
+- ✅ **リアルタイムメッセージング** - Supabase Realtime
+- ✅ **ユーザー認証** - Supabase Auth
+- ✅ **リアクション** - 絵文字リアクション (❤️ 😊 ⚡ ☕ ⭐)
+- ✅ **タイピング表示** - リアルタイムタイピングステータス
+- ✅ **テーマシステム** - 4つのテーマ (cute, cool, minimal, warm)
+- ✅ **タッチ位置共有** - 親密なパートナー向け機能
+- ✅ **プレゼンス機能** - オンライン/オフライン状態
+- ✅ **ファイル共有** - 画像・ファイルアップロード
+
+## 🏗️ アーキテクチャ
+
+### 📐 **システム構成**
+
+```
+┌─────────────────────────────────┐
+│        React Native App         │
+│    (Expo + TypeScript)          │
+│  ┌─────────────────────────────┐ │
+│  │     Frontend Components     │ │
+│  │  • ChatScreen               │ │
+│  │  • LoginScreen              │ │
+│  │  • MessageBubble            │ │
+│  │  • ReactionPicker           │ │
+│  │  • ThemeSelector            │ │
+│  │  • TouchIndicator           │ │
+│  └─────────────────────────────┘ │
+│  ┌─────────────────────────────┐ │
+│  │       State Management      │ │
+│  │  • Redux Toolkit + RTK Query│ │
+│  │  • Real-time Subscriptions │ │
+│  │  • Local Storage (MMKV)    │ │
+│  └─────────────────────────────┘ │
+│  ┌─────────────────────────────┐ │
+│  │      Supabase Client        │ │
+│  │  • Database Operations     │ │
+│  │  • Authentication          │ │
+│  │  • Real-time Subscriptions │ │
+│  │  • File Storage            │ │
+│  └─────────────────────────────┘ │
+└─────────────────────────────────┘
+                 │
+                 │ HTTPS/WSS
+                 ▼
+┌─────────────────────────────────┐
+│           Supabase              │
+│  ┌─────────────────────────────┐ │
+│  │      PostgreSQL Database    │ │
+│  │  • users                    │ │
+│  │  • chat_rooms               │ │
+│  │  • messages                 │ │
+│  │  • reactions                │ │
+│  │  • typing_status            │ │
+│  │  • user_presence            │ │
+│  └─────────────────────────────┘ │
+│  ┌─────────────────────────────┐ │
+│  │      Authentication         │ │
+│  │  • JWT Token Management     │ │
+│  │  • Social Auth (Optional)   │ │
+│  │  • Row Level Security       │ │
+│  └─────────────────────────────┘ │
+│  ┌─────────────────────────────┐ │
+│  │      Real-time Engine       │ │
+│  │  • WebSocket Connections    │ │
+│  │  • Change Data Capture      │ │
+│  │  • Presence System          │ │
+│  └─────────────────────────────┘ │
+│  ┌─────────────────────────────┐ │
+│  │         Storage             │ │
+│  │  • Media Files              │ │
+│  │  • Profile Images           │ │
+│  │  • File Attachments         │ │
+│  └─────────────────────────────┘ │
+└─────────────────────────────────┘
+```
+
+### 🔧 **技術スタック**
+
+#### **フロントエンド**
+- **React Native** - クロスプラットフォームモバイル開発
+- **Expo SDK 52+** - 開発・ビルド・デプロイ統合環境
+- **TypeScript** - 型安全な開発
+- **Redux Toolkit** - 状態管理
+- **React Navigation v6** - ナビゲーション
+- **React Native Reanimated 3** - アニメーション
+- **MMKV** - 高速ローカルストレージ
+
+#### **バックエンド**
+- **Supabase** - Backend-as-a-Service
+- **PostgreSQL** - リレーショナルデータベース
+- **Row Level Security** - データベースレベルセキュリティ
+- **Realtime** - WebSocketベースリアルタイム通信
+- **Storage** - ファイルストレージ
+
+## 📂 プロジェクト構造
+
+```
+chatting/
+├── intimate-chat/                    # React Native アプリ
+│   ├── app.json                      # Expo設定
+│   ├── App.tsx                       # アプリエントリーポイント
+│   ├── package.json                  # 依存関係
+│   ├── tsconfig.json                 # TypeScript設定
+│   └── src/
+│       ├── components/               # 再利用可能コンポーネント
+│       │   ├── ConnectionStatus.tsx  # 接続状態表示
+│       │   ├── InputArea.tsx         # メッセージ入力エリア
+│       │   ├── MessageBubble.tsx     # メッセージ表示
+│       │   ├── ReactionPicker.tsx    # リアクション選択
+│       │   ├── ThemeSelector.tsx     # テーマ選択
+│       │   └── TouchIndicator.tsx    # タッチ位置表示
+│       ├── hooks/                    # カスタムフック
+│       │   ├── useAuth.ts            # 認証管理
+│       │   ├── useMessages.ts        # メッセージ管理
+│       │   ├── useSocket.ts          # リアルタイム接続
+│       │   └── useTheme.ts           # テーマ管理
+│       ├── screens/                  # 画面コンポーネント
+│       │   ├── ChatScreen.tsx        # チャット画面
+│       │   └── LoginScreen.tsx       # ログイン画面
+│       ├── services/                 # API・外部サービス
+│       │   ├── apiService.ts         # API通信
+│       │   └── socketService.ts      # WebSocket通信
+│       ├── store/                    # 状態管理
+│       │   ├── index.ts              # ストア設定
+│       │   └── slices/               # Redux slices
+│       │       ├── authSlice.ts      # 認証状態
+│       │       ├── chatSlice.ts      # チャット状態
+│       │       └── themeSlice.ts     # テーマ状態
+│       ├── styles/                   # スタイル定義
+│       │   └── themes.ts             # テーマ定義
+│       ├── types/                    # 型定義
+│       │   └── index.ts              # 共通型定義
+│       └── utils/                    # ユーティリティ
+│           ├── constants.ts          # 定数定義
+│           ├── helpers.ts            # ヘルパー関数
+│           └── validations.ts        # バリデーション
+├── supabase/                         # Supabase設定
+│   ├── config.sql                    # データベース設定
+│   ├── seed.sql                      # 初期データ
+│   └── functions/                    # Edge Functions
+├── docs/                             # ドキュメント
+│   ├── api.md                        # API仕様
+│   ├── database.md                   # DB設計
+│   └── deployment.md                 # デプロイ手順
+├── .mcp.json                         # MCP設定
+├── CLAUDE.md                         # このファイル
+└── README.md                         # プロジェクト概要
+```
+
+## 💾 データベース設計
+
+### 📊 **ERD (Entity Relationship Diagram)**
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│     users       │     │   chat_rooms    │     │    messages     │
+├─────────────────┤     ├─────────────────┤     ├─────────────────┤
+│ id (UUID) PK    │────┐│ id (UUID) PK    │────┐│ id (UUID) PK    │
+│ email           │    ││ name            │    ││ room_id FK      │
+│ username        │    ││ type            │    ││ sender_id FK    │
+│ display_name    │    ││ created_by FK   │    ││ content         │
+│ avatar_url      │    ││ created_at      │    ││ message_type    │
+│ theme_preference│    ││ created_at      │    ││ metadata        │
+│ is_online       │    │└─────────────────┘    ││ reply_to FK     │
+│ last_seen_at    │    │                       ││ is_deleted      │
+│ created_at      │    │                       ││ created_at      │
+│ updated_at      │    │                       ││ updated_at      │
+└─────────────────┘    │                       └─────────────────┘
+         │              │                                │
+         │              │       ┌─────────────────┐     │
+         │              │       │   reactions     │     │
+         │              │       ├─────────────────┤     │
+         │              │       │ id (UUID) PK    │     │
+         │              │       │ message_id FK   │─────┘
+         │              │       │ user_id FK      │─────┐
+         │              │       │ reaction_type   │     │
+         │              │       │ created_at      │     │
+         │              │       └─────────────────┘     │
+         │              │                               │
+         │              │       ┌─────────────────┐     │
+         │              └───────│room_participants│     │
+         │                      ├─────────────────┤     │
+         └──────────────────────│ user_id FK      │     │
+                                │ room_id FK      │─────┘
+                                │ role            │
+                                │ joined_at       │
+                                │ last_read_at    │
+                                └─────────────────┘
+```
+
+### 🗂️ **テーブル定義**
+
+#### 1. **users テーブル**
+```sql
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    display_name VARCHAR(100),
+    avatar_url TEXT,
+    theme_preference VARCHAR(20) DEFAULT 'cute',
+    is_online BOOLEAN DEFAULT false,
+    last_seen_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Row Level Security
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
+```
+
+#### 2. **chat_rooms テーブル**
+```sql
+CREATE TABLE chat_rooms (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100),
+    room_type VARCHAR(20) DEFAULT '1on1',
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Row Level Security
+ALTER TABLE chat_rooms ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view joined rooms" ON chat_rooms FOR SELECT 
+    USING (id IN (SELECT room_id FROM room_participants WHERE user_id = auth.uid()));
+```
+
+#### 3. **room_participants テーブル**
+```sql
+CREATE TABLE room_participants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    room_id UUID REFERENCES chat_rooms(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(20) DEFAULT 'member',
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_read_at TIMESTAMP WITH TIME ZONE,
+    UNIQUE(room_id, user_id)
+);
+
+-- Row Level Security
+ALTER TABLE room_participants ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own participation" ON room_participants FOR SELECT 
+    USING (user_id = auth.uid());
+```
+
+#### 4. **messages テーブル**
+```sql
+CREATE TABLE messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    room_id UUID REFERENCES chat_rooms(id) ON DELETE CASCADE,
+    sender_id UUID REFERENCES users(id),
+    content TEXT,
+    message_type VARCHAR(20) DEFAULT 'text',
+    metadata JSONB DEFAULT '{}',
+    reply_to UUID REFERENCES messages(id),
+    is_deleted BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Row Level Security
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view messages in joined rooms" ON messages FOR SELECT 
+    USING (room_id IN (SELECT room_id FROM room_participants WHERE user_id = auth.uid()));
+CREATE POLICY "Users can insert messages in joined rooms" ON messages FOR INSERT 
+    WITH CHECK (room_id IN (SELECT room_id FROM room_participants WHERE user_id = auth.uid()));
+```
+
+#### 5. **reactions テーブル**
+```sql
+CREATE TABLE reactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    reaction_type VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(message_id, user_id, reaction_type)
+);
+
+-- Row Level Security
+ALTER TABLE reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view reactions in joined rooms" ON reactions FOR SELECT 
+    USING (message_id IN (
+        SELECT m.id FROM messages m 
+        JOIN room_participants rp ON m.room_id = rp.room_id 
+        WHERE rp.user_id = auth.uid()
+    ));
+```
+
+## 🛠️ セットアップ手順
+
+### 1. **環境準備**
 
 ```bash
-# Backend (Node.js server)
-node intimate-chat-backend.js
+# Node.js 18+ インストール確認
+node --version
 
-# Frontend (if using a React dev server)
-# Note: The frontend file is currently a standalone React component
-# You may need to set up a proper React project structure first
+# Expo CLI インストール
+npm install -g @expo/cli
+
+# プロジェクトディレクトリに移動
+cd intimate-chat
+
+# 依存関係インストール
+npm install
+
+# Supabase CLI インストール (オプション)
+npm install -g supabase
 ```
 
-## Architecture Overview
+### 2. **Supabase セットアップ**
 
-### Backend Architecture (`intimate-chat-backend.js`)
-- **Framework**: Express.js with Socket.IO for real-time communication
-- **Authentication**: JWT-based with bcrypt password hashing
-- **Data Storage**: In-memory storage (Maps) - needs database integration for production
-- **Real-time Features**: Socket.IO handles messaging, reactions, typing indicators, presence
-- **Security**: Helmet, CORS, rate limiting, authentication middleware
+#### **Step 1: Supabaseプロジェクト作成**
+1. [Supabase](https://supabase.com) でアカウント作成
+2. 新しいプロジェクトを作成
+3. データベースパスワードを設定
 
-Key data structures:
-- `users` - User accounts and profiles
-- `rooms` - Chat rooms and participants
-- `messages` - Chat messages with reactions
-- `typingUsers` - Real-time typing status
-- `userSockets` - Socket connection mapping
+#### **Step 2: データベース設定**
+```sql
+-- SQL Editor で実行
+-- テーブル作成 (上記のテーブル定義を使用)
 
-### Frontend Architecture (`intimate-chat-frontend-realtime.tsx`)
-- **Framework**: React with custom hooks for state management
-- **Styling**: Custom styled components with theme system
-- **Real-time**: Socket.IO client with simulation layer for demo
-- **Themes**: Multiple UI themes (cute, cool, minimal, warm)
-- **State Management**: React hooks with local state
+-- 初期データ挿入
+INSERT INTO users (id, email, username, display_name) VALUES
+('00000000-0000-0000-0000-000000000001', 'demo@example.com', 'demo', 'Demo User'),
+('00000000-0000-0000-0000-000000000002', 'partner@example.com', 'partner', 'Partner User');
 
-Key components:
-- `useSocket()` - Socket connection management
-- `useAuth()` - Authentication state
-- `useMessages()` - Message and reaction handling
-- `StyledComponents` - Themed UI components
+-- デモルーム作成
+INSERT INTO chat_rooms (id, name, created_by) VALUES
+('00000000-0000-0000-0000-000000000001', 'Demo Chat', '00000000-0000-0000-0000-000000000001');
 
-### Database Design (from specs)
-The technical specs define a PostgreSQL schema with:
-- Users table with Firebase auth integration
-- Chat rooms with 1-on-1 and group support
-- Messages with reactions and metadata
-- Real-time typing and presence tracking
-
-## Key Features
-
-1. **Real-time Messaging**: Bi-directional message exchange
-2. **Reactions**: Emoji reactions (heart, smile, zap, coffee, star)
-3. **Typing Indicators**: Live typing status with content preview
-4. **Presence System**: Online/offline status tracking
-5. **Touch Position Sharing**: Unique intimate feature for partners
-6. **Theme System**: Multiple customizable UI themes
-7. **Rate Limiting**: Protection against message spam
-8. **Authentication**: Secure JWT-based user sessions
-
-## File Structure
-
-```
-/
-├── intimate-chat-backend.js          # Node.js/Express/Socket.IO server
-├── intimate-chat-frontend-realtime.tsx  # React frontend component
-├── intimate-chat-technical-specs.md  # Comprehensive technical documentation
-└── CLAUDE.md                         # This file
+-- 参加者追加
+INSERT INTO room_participants (room_id, user_id, role) VALUES
+('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'admin'),
+('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'member');
 ```
 
-## Production Considerations
+#### **Step 3: 認証設定**
+- Settings → Authentication → Email確認を無効化 (開発時)
+- Settings → API → anon keyとservice_role keyをコピー
 
-- **Database**: Replace in-memory storage with PostgreSQL/Supabase
-- **Authentication**: Integrate Firebase Auth as specified
-- **File Upload**: Add Cloudinary for media sharing
-- **Deployment**: Backend to Railway/Render, Frontend to Vercel
-- **Monitoring**: Add Sentry for error tracking
-- **Caching**: Implement Redis for sessions and real-time data
+### 3. **環境変数設定**
 
-## Environment Variables
+```bash
+# intimate-chat/.env
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
 
-The backend expects these environment variables:
-- `JWT_SECRET` - Secret key for JWT tokens
-- `CLIENT_URL` - Frontend URL for CORS
-- `PORT` - Server port (defaults to 3001)
-- `NODE_ENV` - Environment (development/production)
+### 4. **アプリケーション起動**
 
-## Security Notes
+```bash
+# 開発サーバー起動
+cd intimate-chat
+npx expo start
 
-- All passwords are bcrypt hashed
-- JWT tokens expire after 7 days
-- Rate limiting prevents spam (100 requests/min API, 60 messages/min)
-- Socket.IO authentication required for all real-time features
-- Input validation on all message content
+# iOS シミュレータ
+npx expo start --ios
 
-## Testing Notes
+# Android エミュレータ
+npx expo start --android
 
-The frontend includes simulation mode for development/demo purposes. The SocketIOClient class simulates server responses for testing without a running backend.
+# 実機テスト (Expo Go アプリ使用)
+# QRコードをスキャン
+```
+
+## 🚀 デプロイメント手順
+
+### 📱 **モバイルアプリ デプロイ**
+
+#### **Step 1: Expo Application Services (EAS) セットアップ**
+```bash
+# EAS CLI インストール
+npm install -g eas-cli
+
+# Expo アカウントでログイン
+eas login
+
+# プロジェクト設定
+eas build:configure
+```
+
+#### **Step 2: ビルド設定**
+```json
+// eas.json
+{
+  "cli": {
+    "version": ">= 3.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {}
+  },
+  "submit": {
+    "production": {}
+  }
+}
+```
+
+#### **Step 3: ビルド実行**
+```bash
+# Android APK ビルド
+eas build --platform android --profile preview
+
+# iOS TestFlight ビルド
+eas build --platform ios --profile production
+
+# 両方同時ビルド
+eas build --platform all --profile production
+```
+
+#### **Step 4: ストア公開**
+```bash
+# Google Play Store
+eas submit --platform android
+
+# Apple App Store
+eas submit --platform ios
+```
+
+### 🗄️ **Supabase 本番環境設定**
+
+#### **Step 1: 本番データベース最適化**
+```sql
+-- インデックス作成
+CREATE INDEX idx_messages_room_created ON messages(room_id, created_at DESC);
+CREATE INDEX idx_messages_sender ON messages(sender_id);
+CREATE INDEX idx_reactions_message ON reactions(message_id);
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_email ON users(email);
+
+-- パフォーマンス監視
+SELECT * FROM pg_stat_user_tables WHERE relname IN ('messages', 'users', 'chat_rooms');
+```
+
+#### **Step 2: セキュリティ強化**
+```sql
+-- Row Level Security 有効化 (全テーブル)
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE room_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reactions ENABLE ROW LEVEL SECURITY;
+
+-- API制限設定
+-- Settings → API → Rate Limiting 設定
+```
+
+#### **Step 3: バックアップ設定**
+- Settings → Database → Backups
+- 自動バックアップを有効化
+- Point-in-time recovery 設定
+
+## 🔧 開発ワークフロー
+
+### 🏃‍♂️ **日常的な開発手順**
+
+```bash
+# 1. 機能ブランチ作成
+git checkout -b feature/new-message-reactions
+
+# 2. 開発サーバー起動
+cd intimate-chat
+npx expo start
+
+# 3. 変更をテスト
+# - iOS シミュレータ
+# - Android エミュレータ  
+# - 実機 (Expo Go)
+
+# 4. 型チェック
+npx tsc --noEmit
+
+# 5. リント
+npx eslint src/
+
+# 6. テスト実行
+npm test
+
+# 7. コミット
+git add .
+git commit -m "feat: add message reactions functionality"
+
+# 8. プッシュ
+git push origin feature/new-message-reactions
+```
+
+### 🧪 **テスト戦略**
+
+```bash
+# Jest + React Native Testing Library
+npm install --save-dev jest @testing-library/react-native
+
+# コンポーネントテスト例
+// __tests__/MessageBubble.test.tsx
+import { render, screen } from '@testing-library/react-native';
+import MessageBubble from '../src/components/MessageBubble';
+
+test('renders message content', () => {
+  render(<MessageBubble message={{content: 'Hello World'}} />);
+  expect(screen.getByText('Hello World')).toBeTruthy();
+});
+```
+
+### 📊 **パフォーマンス監視**
+
+```typescript
+// パフォーマンス計測
+import { performance } from 'perf_hooks';
+
+const measureRenderTime = (componentName: string) => {
+  const start = performance.now();
+  // レンダリング処理
+  const end = performance.now();
+  console.log(`${componentName} render time: ${end - start}ms`);
+};
+```
+
+## 🔒 セキュリティ考慮事項
+
+### 🛡️ **認証・認可**
+- **Supabase Auth**: JWT トークンベース認証
+- **Row Level Security**: データベースレベルでのアクセス制御
+- **API Key 管理**: 環境変数での機密情報管理
+
+### 🚫 **入力検証**
+```typescript
+// バリデーション例
+import { z } from 'zod';
+
+const MessageSchema = z.object({
+  content: z.string().min(1).max(1000),
+  roomId: z.string().uuid(),
+  messageType: z.enum(['text', 'image', 'file'])
+});
+
+export const validateMessage = (data: unknown) => {
+  return MessageSchema.safeParse(data);
+};
+```
+
+### 🔐 **データ暗号化**
+- **通信**: HTTPS/WSS強制
+- **保存**: Supabase自動暗号化
+- **ファイル**: Supabase Storage暗号化
+
+## 📈 パフォーマンス最適化
+
+### ⚡ **リアルタイム最適化**
+```typescript
+// 効率的なSubscription管理
+const useOptimizedSubscription = (roomId: string) => {
+  useEffect(() => {
+    const subscription = supabase
+      .channel(`room:${roomId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${roomId}`
+      }, handleNewMessage)
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [roomId]);
+};
+```
+
+### 🎯 **メモリ最適化**
+```typescript
+// React.memo でのコンポーネント最適化
+const MessageBubble = React.memo(({ message }) => {
+  return <View>{/* メッセージ表示 */}</View>;
+}, (prevProps, nextProps) => {
+  return prevProps.message.id === nextProps.message.id;
+});
+```
+
+### 📱 **モバイル特有の最適化**
+- **画像圧縮**: Expo ImageManipulator使用
+- **キャッシュ**: MMKV高速ストレージ
+- **バッテリー**: Background Task最適化
+
+## 🚨 トラブルシューティング
+
+### ❌ **よくある問題と解決策**
+
+#### **1. Supabase接続エラー**
+```typescript
+// 接続状態確認
+const checkSupabaseConnection = async () => {
+  try {
+    const { data, error } = await supabase.from('users').select('count');
+    if (error) throw error;
+    console.log('✅ Supabase connected');
+  } catch (error) {
+    console.error('❌ Supabase connection failed:', error);
+  }
+};
+```
+
+#### **2. リアルタイム機能不動作**
+```typescript
+// WebSocket状態確認
+supabase.realtime.onOpen(() => console.log('✅ WebSocket connected'));
+supabase.realtime.onClose(() => console.log('❌ WebSocket disconnected'));
+supabase.realtime.onError((error) => console.error('WebSocket error:', error));
+```
+
+#### **3. 認証問題**
+```typescript
+// 認証状態デバッグ
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Auth event:', event);
+  console.log('Session:', session);
+});
+```
+
+### 🔍 **デバッグ手順**
+1. **ログ確認**: `npx expo logs`
+2. **ネットワーク**: React Native Debugger
+3. **データベース**: Supabase Dashboard → Logs
+4. **パフォーマンス**: Flipper使用
+
+## 📚 参考資料
+
+### 📖 **公式ドキュメント**
+- [Expo Documentation](https://docs.expo.dev/)
+- [Supabase Documentation](https://supabase.com/docs)
+- [React Native Documentation](https://reactnative.dev/docs)
+- [Redux Toolkit Documentation](https://redux-toolkit.js.org/)
+
+### 🎓 **学習リソース**
+- [React Native Tutorial](https://reactnative.dev/docs/tutorial)
+- [Supabase Getting Started](https://supabase.com/docs/guides/getting-started)
+- [Expo Router](https://docs.expo.dev/router/introduction/)
+
+### 🛠️ **開発ツール**
+- [React Native Debugger](https://github.com/jhen0409/react-native-debugger)
+- [Flipper](https://fbflipper.com/)
+- [Expo Dev Tools](https://docs.expo.dev/debugging/tools/)
+
+---
+
+## 💡 開発のコツ
+
+1. **段階的開発**: まず基本機能から実装
+2. **テスト駆動**: 重要な機能は必ずテストを書く
+3. **パフォーマンス優先**: モバイルではパフォーマンスが重要
+4. **セキュリティ重視**: 認証・認可を最初から考慮
+5. **ユーザビリティ**: モバイルUXを重視した設計
+
+**🎯 目標**: シンプルで美しく、高性能な親密チャットアプリケーションの構築

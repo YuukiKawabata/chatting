@@ -13,7 +13,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: "*", // Allow all origins for development
     methods: ["GET", "POST"]
   }
 });
@@ -45,6 +45,88 @@ const messages = new Map();
 const typingUsers = new Map();
 const userSockets = new Map();
 const reactions = new Map();
+
+// Add demo user for testing
+(async () => {
+  const hashedPassword = await bcrypt.hash('password', 10);
+  const demoUser = {
+    id: 'demo-user-1',
+    username: 'demo',
+    email: 'demo@example.com',
+    displayName: 'Demo User',
+    password: hashedPassword,
+    avatarUrl: null,
+    themePreference: 'cute',
+    isOnline: false,
+    lastSeenAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
+  users.set('demo-user-1', demoUser);
+  console.log('✅ Demo user created: demo@example.com / password');
+
+  // Create second demo user
+  const hashedPassword2 = await bcrypt.hash('password', 10);
+  const demoUser2 = {
+    id: 'demo-user-2',
+    username: 'partner',
+    email: 'partner@example.com',
+    displayName: 'Partner User',
+    password: hashedPassword2,
+    avatarUrl: null,
+    themePreference: 'cool',
+    isOnline: false,
+    lastSeenAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
+  users.set('demo-user-2', demoUser2);
+  console.log('✅ Partner user created: partner@example.com / password');
+
+  // Create demo room
+  const demoRoom = {
+    id: 'room_demo',
+    name: 'Demo Chat Room',
+    type: '1on1',
+    participants: [
+      {
+        userId: 'demo-user-1',
+        role: 'admin',
+        joinedAt: new Date().toISOString()
+      },
+      {
+        userId: 'demo-user-2',
+        role: 'member',
+        joinedAt: new Date().toISOString()
+      }
+    ],
+    createdBy: 'demo-user-1',
+    createdAt: new Date().toISOString()
+  };
+  rooms.set('room_demo', demoRoom);
+  console.log('✅ Demo room created: room_demo');
+
+  // Add some demo messages after a delay
+  setTimeout(() => {
+    const welcomeMessage = {
+      id: generateMessageId(),
+      roomId: 'room_demo',
+      senderId: 'demo-user-2',
+      content: 'こんにちは！ 👋 チャット機能のテストへようこそ！',
+      type: 'text',
+      createdAt: new Date().toISOString(),
+      reactions: [],
+      sender: {
+        id: 'demo-user-2',
+        username: 'partner',
+        displayName: 'Partner User'
+      }
+    };
+    
+    const roomMessages = messages.get('room_demo') || [];
+    roomMessages.push(welcomeMessage);
+    messages.set('room_demo', roomMessages);
+    console.log('✅ Welcome message added');
+  }, 5000);
+})();
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -398,7 +480,9 @@ io.on('connection', (socket) => {
   socket.on('typing_update', (data) => {
     const { roomId, content } = data;
     
-    socket.to(roomId).emit('user_typing_update', {
+    console.log(`📝 ${socket.user.username} typing in ${roomId}: "${content}"`);
+    
+    socket.to(roomId).emit('user_typing', {
       userId: socket.userId,
       username: socket.user.username,
       content,

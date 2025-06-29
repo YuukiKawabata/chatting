@@ -2,14 +2,17 @@
 
 export interface User {
   id: string;
+  firebaseUid?: string;
   username: string;
   displayName: string;
   email: string;
   avatarUrl?: string;
   themePreference: ThemeName;
+  notificationSettings?: Record<string, any>;
   isOnline: boolean;
   lastSeenAt: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Message {
@@ -17,8 +20,12 @@ export interface Message {
   roomId: string;
   senderId: string;
   content: string;
-  type: 'text' | 'image' | 'file';
+  messageType: MessageType;
+  metadata?: Record<string, any>;
+  replyTo?: string;
+  isDeleted?: boolean;
   createdAt: string;
+  updatedAt?: string;
   reactions?: Reaction[];
   sender?: {
     id: string;
@@ -37,14 +44,17 @@ export interface Reaction {
 }
 
 export type ReactionType = 'heart' | 'smile' | 'zap' | 'coffee' | 'star';
+export type MessageType = 'text' | 'image' | 'file';
 
 export interface ChatRoom {
   id: string;
+  roomType: '1on1' | 'group';
   name?: string;
-  type: '1on1' | 'group';
+  description?: string;
   participants: RoomParticipant[];
   createdBy: string;
   createdAt: string;
+  updatedAt?: string;
   lastMessage?: Message;
 }
 

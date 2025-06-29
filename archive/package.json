@@ -1,0 +1,25 @@
+{
+  "name": "chatting-1",
+  "version": "1.0.0",
+  "description": "リアルタイムチャット機能を持つ親密なコミュニケーションアプリケーション",
+  "main": "intimate-chat-backend.js",
+  "scripts": {
+    "start": "node intimate-chat-backend.js",
+    "dev": "node intimate-chat-backend.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.6.12",
+    "socket.io": "^4.8.1"
+  }
+}

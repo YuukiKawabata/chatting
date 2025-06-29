@@ -10,6 +10,9 @@ import {
   Alert,
   Dimensions,
   GestureResponderEvent,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -35,7 +38,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export const ChatScreen: React.FC = () => {
   // Hooks
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const { currentTheme, theme, changeTheme } = useTheme();
   const { 
     isConnected, 
@@ -51,7 +54,7 @@ export const ChatScreen: React.FC = () => {
     sendMessage, 
     handleTyping, 
     addReaction 
-  } = useMessages('room_demo');
+  } = useMessages('room_demo', user?.id);
 
   // State
   const [currentInput, setCurrentInput] = useState('');
@@ -65,12 +68,13 @@ export const ChatScreen: React.FC = () => {
   const scrollViewRef = useRef<ScrollView>(null);
   const partnerInputRef = useRef<string>('');
 
-  // Connect socket when component mounts
+  // Connect socket when component mounts (only if authenticated)
   useEffect(() => {
-    if (user && !isConnected && !isConnecting) {
-      connect('demo_token'); // TODO: Use real token
+    if (user && token && !isConnected && !isConnecting) {
+      console.log('Connecting to socket with token:', token.substring(0, 10) + '...');
+      connect(token);
     }
-  }, [user, isConnected, isConnecting, connect]);
+  }, [user, token, isConnected, isConnecting, connect]);
 
   // Handle partner typing updates
   useEffect(() => {
@@ -106,6 +110,32 @@ export const ChatScreen: React.FC = () => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
+
+  // Handle keyboard events for better UX
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
 
   // Handlers
   const handleSendMessage = useCallback((message: string) => {
@@ -207,7 +237,7 @@ export const ChatScreen: React.FC = () => {
                 onPress={handleThemePress}
               >
                 <Feather 
-                  name="palette" 
+                  name="settings" 
                   size={24} 
                   color={theme.colors.text.primary} 
                 />
@@ -234,44 +264,52 @@ export const ChatScreen: React.FC = () => {
             visible={showThemeSelector}
           />
 
-          {/* Messages Area */}
-          <View style={styles.messagesContainer}>
-            <ScrollView
-              ref={scrollViewRef}
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              onTouchStart={handleScreenTouch}
-            >
-              {messages.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: theme.colors.text.secondary }]}>
-                    メッセージを送信して会話を始めましょう ✨
-                  </Text>
-                </View>
-              ) : (
-                messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    isOwn={message.senderId === user?.id}
-                    theme={theme}
-                    onReaction={handleReactionPress}
-                  />
-                ))
-              )}
-            </ScrollView>
-          </View>
+          {/* Content with Keyboard Avoiding */}
+          <KeyboardAvoidingView 
+            style={styles.keyboardContainer}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          >
+            {/* Messages Area */}
+            <View style={styles.messagesContainer}>
+              <ScrollView
+                ref={scrollViewRef}
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                onTouchStart={handleScreenTouch}
+                keyboardShouldPersistTaps="handled"
+              >
+                {messages.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Text style={[styles.emptyText, { color: theme.colors.text.secondary }]}>
+                      メッセージを送信して会話を始めましょう ✨
+                    </Text>
+                  </View>
+                ) : (
+                  messages.map((message) => (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      isOwn={message.senderId === user?.id}
+                      theme={theme}
+                      onReaction={handleReactionPress}
+                    />
+                  ))
+                )}
+              </ScrollView>
+            </View>
 
-          {/* Input Area */}
-          <InputArea
-            theme={theme}
-            onSendMessage={handleSendMessage}
-            onTyping={handleInputChange}
-            disabled={!isConnected}
-            partnerTyping={partnerTyping}
-            currentInput={currentInput}
-          />
+            {/* Input Area */}
+            <InputArea
+              theme={theme}
+              onSendMessage={handleSendMessage}
+              onTyping={handleInputChange}
+              disabled={!isConnected}
+              partnerTyping={partnerTyping}
+              currentInput={currentInput}
+            />
+          </KeyboardAvoidingView>
         </SafeAreaView>
 
         {/* Connection Status */}
@@ -386,6 +424,9 @@ const styles = StyleSheet.create({
   userStatus: {
     fontSize: 14,
     opacity: 0.8,
+  },
+  keyboardContainer: {
+    flex: 1,
   },
   messagesContainer: {
     flex: 1,

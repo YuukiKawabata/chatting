@@ -13,7 +13,7 @@ class SocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
 
-  constructor(serverUrl: string = 'http://localhost:3001') {
+  constructor(serverUrl: string = 'http://192.168.0.195:3001') {
     this.serverUrl = serverUrl;
   }
 
