@@ -111,8 +111,39 @@ export const SupabaseConnectionTest: React.FC = () => {
 
       // 6. Realtimeサービステスト
       try {
-        const channel = supabase.channel('test-connection-' + Date.now());
+        const channel = supabase.channel('test-connection-' + Date.now(), {
+          config: {
+            presence: { key: 'test' }
+          }
+        });
         let isCompleted = false;
+        
+        // チャンネルレベルでのエラーハンドリングを追加
+        channel
+          .onError((error) => {
+            if (!isCompleted) {
+              isCompleted = true;
+              updateResult(5, 'error', 'Realtime チャンネルエラー (onError)', {
+                error: error,
+                suggestions: [
+                  'Supabaseプロジェクトの設定を確認してください',
+                  'API Keyが正しいか確認してください',
+                  'Realtimeサービスが有効になっているか確認してください'
+                ]
+              });
+            }
+          })
+          .onClose(() => {
+            if (!isCompleted) {
+              isCompleted = true;
+              updateResult(5, 'error', 'Realtime 接続が閉じられました (onClose)', {
+                suggestions: [
+                  'ネットワーク接続を確認してください',
+                  'Supabaseプロジェクトが有効か確認してください'
+                ]
+              });
+            }
+          });
         
         // チャンネル作成テスト
         const subscriptionPromise = new Promise<void>((resolve, reject) => {
@@ -124,7 +155,8 @@ export const SupabaseConnectionTest: React.FC = () => {
                 suggestions: [
                   'インターネット接続を確認してください',
                   'Supabaseプロジェクトの設定を確認してください',
-                  'ファイアウォールやプロキシ設定を確認してください'
+                  'ファイアウォールやプロキシ設定を確認してください',
+                  'Realtime機能がSupabaseで有効になっているか確認してください'
                 ]
               });
               supabase.removeChannel(channel);
@@ -167,7 +199,8 @@ export const SupabaseConnectionTest: React.FC = () => {
                 error: err,
                 suggestions: [
                   'Supabaseプロジェクトの設定を確認してください',
-                  'API Keyが正しいか確認してください'
+                  'API Keyが正しいか確認してください',
+                  'Realtime機能がSupabaseプロジェクトで有効になっているか確認してください'
                 ]
               });
               reject(err || new Error('Channel error'));
@@ -179,7 +212,8 @@ export const SupabaseConnectionTest: React.FC = () => {
                 error: err,
                 suggestions: [
                   'サーバーの応答時間が遅い可能性があります',
-                  'しばらく待ってから再試行してください'
+                  'しばらく待ってから再試行してください',
+                  'Supabaseプロジェクトの状態を確認してください'
                 ]
               });
               reject(err || new Error('Server timeout'));
@@ -195,7 +229,8 @@ export const SupabaseConnectionTest: React.FC = () => {
             stack: error.stack,
             suggestions: [
               'コンソールログで詳細なエラー情報を確認してください',
-              'Supabase Realtime機能が有効になっているか確認してください'
+              'Supabase Realtime機能が有効になっているか確認してください',
+              '@supabase/supabase-jsのバージョンを確認してください'
             ]
           });
         }

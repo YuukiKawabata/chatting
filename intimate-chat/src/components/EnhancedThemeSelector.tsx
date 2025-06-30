@@ -76,7 +76,7 @@ export const EnhancedThemeSelector: React.FC<EnhancedThemeSelectorProps> = ({
       description: '自然豊かなグリーンテーマ'
     },
     sunset: { 
-      icon: 'sunset', 
+      icon: 'sun', 
       gradient: ['#F97316', '#EAB308'],
       description: '夕日をイメージしたテーマ'
     },
@@ -88,13 +88,13 @@ export const EnhancedThemeSelector: React.FC<EnhancedThemeSelectorProps> = ({
         Animated.timing(slideAnim, {
           toValue: 1,
           duration: 300,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
           tension: 50,
           friction: 8,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
     } else {
@@ -102,12 +102,12 @@ export const EnhancedThemeSelector: React.FC<EnhancedThemeSelectorProps> = ({
         Animated.timing(slideAnim, {
           toValue: 0,
           duration: 250,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(scaleAnim, {
           toValue: 0.9,
           duration: 250,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
     }
@@ -242,7 +242,7 @@ export const EnhancedThemeSelector: React.FC<EnhancedThemeSelectorProps> = ({
                 colors={[previewTheme.colors.primary, previewTheme.colors.secondary]}
                 style={styles.headerIcon}
               >
-                <Feather name="palette" size={20} color="#FFFFFF" />
+                <Feather name="droplet" size={20} color="#FFFFFF" />
               </LinearGradient>
               <Text style={[styles.headerTitle, { color: previewTheme.colors.text.primary }]}>
                 テーマ選択

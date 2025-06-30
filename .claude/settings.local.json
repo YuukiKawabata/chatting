@@ -13,7 +13,14 @@
       "Bash(rg:*)",
       "Bash(true)",
       "Bash(npm run type-check:*)",
-      "Bash(npm start:*)"
+      "Bash(npm start:*)",
+      "mcp__filesystem__list_allowed_directories",
+      "mcp__filesystem__read_file",
+      "mcp__filesystem__edit_file",
+      "mcp__filesystem__write_file",
+      "Bash(npx expo logs:*)",
+      "mcp__filesystem__read_multiple_files",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   },

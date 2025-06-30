@@ -24,48 +24,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// 型定義用データベース型
+// 型定義用データベース型（auth.usersベース、独自usersテーブルなし）
 export type Database = {
   public: {
     Tables: {
-      users: {
-        Row: {
-          id: string;
-          email: string;
-          username: string;
-          display_name: string | null;
-          avatar_url: string | null;
-          theme_preference: string;
-          is_online: boolean;
-          last_seen_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          email: string;
-          username: string;
-          display_name?: string | null;
-          avatar_url?: string | null;
-          theme_preference?: string;
-          is_online?: boolean;
-          last_seen_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          email?: string;
-          username?: string;
-          display_name?: string | null;
-          avatar_url?: string | null;
-          theme_preference?: string;
-          is_online?: boolean;
-          last_seen_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
       chat_rooms: {
         Row: {
           id: string;

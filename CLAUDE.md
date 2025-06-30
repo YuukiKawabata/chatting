@@ -15,7 +15,7 @@
 
 ### 🌟 **主要機能**
 - ✅ **リアルタイムメッセージング** - Supabase Realtime
-- ✅ **ユーザー認証** - Supabase Auth
+- ✅ **ユーザー認証** - Supabase Auth (auth.usersのみ使用)
 - ✅ **リアクション** - 絵文字リアクション (❤️ 😊 ⚡ ☕ ⭐)
 - ✅ **タイピング表示** - リアルタイムタイピングステータス
 - ✅ **テーマシステム** - 4つのテーマ (cute, cool, minimal, warm)
@@ -44,7 +44,7 @@
 │  │       State Management      │ │
 │  │  • Redux Toolkit + RTK Query│ │
 │  │  • Real-time Subscriptions │ │
-│  │  • Local Storage (MMKV)    │ │
+│  │  • auth.users メタデータ   │ │
 │  └─────────────────────────────┘ │
 │  ┌─────────────────────────────┐ │
 │  │      Supabase Client        │ │
@@ -61,7 +61,7 @@
 │           Supabase              │
 │  ┌─────────────────────────────┐ │
 │  │      PostgreSQL Database    │ │
-│  │  • users                    │ │
+│  │  • auth.users (標準)       │ │
 │  │  • chat_rooms               │ │
 │  │  • messages                 │ │
 │  │  • reactions                │ │
@@ -98,11 +98,12 @@
 - **Redux Toolkit** - 状態管理
 - **React Navigation v6** - ナビゲーション
 - **React Native Reanimated 3** - アニメーション
-- **MMKV** - 高速ローカルストレージ
+- **auth.users metadata** - ユーザー情報保存
 
 #### **バックエンド**
 - **Supabase** - Backend-as-a-Service
 - **PostgreSQL** - リレーショナルデータベース
+- **Supabase Auth** - 認証・ユーザー管理 (auth.usersテーブル)
 - **Row Level Security** - データベースレベルセキュリティ
 - **Realtime** - WebSocketベースリアルタイム通信
 - **Storage** - ファイルストレージ
@@ -166,21 +167,23 @@ chatting/
 
 ### 📊 **ERD (Entity Relationship Diagram)**
 
+🎯 **設計方針**: auth.usersのみ使用（独自usersテーブルなし）
+
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│     users       │     │   chat_rooms    │     │    messages     │
+│   auth.users    │     │   chat_rooms    │     │    messages     │
 ├─────────────────┤     ├─────────────────┤     ├─────────────────┤
 │ id (UUID) PK    │────┐│ id (UUID) PK    │────┐│ id (UUID) PK    │
 │ email           │    ││ name            │    ││ room_id FK      │
-│ username        │    ││ type            │    ││ sender_id FK    │
-│ display_name    │    ││ created_by FK   │    ││ content         │
-│ avatar_url      │    ││ created_at      │    ││ message_type    │
-│ theme_preference│    ││ created_at      │    ││ metadata        │
-│ is_online       │    │└─────────────────┘    ││ reply_to FK     │
-│ last_seen_at    │    │                       ││ is_deleted      │
-│ created_at      │    │                       ││ created_at      │
-│ updated_at      │    │                       ││ updated_at      │
-└─────────────────┘    │                       └─────────────────┘
+│ user_metadata:  │    ││ room_type       │    ││ sender_id FK    │
+│  - username     │    ││ created_by FK   │    ││ content         │
+│  - display_name │    ││ created_at      │    ││ message_type    │
+│  - theme_prefer │    ││ updated_at      │    ││ metadata        │
+│ created_at      │    │└─────────────────┘    ││ reply_to FK     │
+│ updated_at      │    │                       ││ is_deleted      │
+└─────────────────┘    │                       ││ created_at      │
+         │              │                       ││ updated_at      │
+         │              │                       └─────────────────┘
          │              │                                │
          │              │       ┌─────────────────┐     │
          │              │       │   reactions     │     │
@@ -205,25 +208,28 @@ chatting/
 
 ### 🗂️ **テーブル定義**
 
-#### 1. **users テーブル**
+#### 1. **auth.users テーブル（Supabase標準）**
 ```sql
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    display_name VARCHAR(100),
-    avatar_url TEXT,
-    theme_preference VARCHAR(20) DEFAULT 'cute',
-    is_online BOOLEAN DEFAULT false,
-    last_seen_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Row Level Security
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
+-- Supabaseが自動で作成・管理
+-- ユーザー情報はuser_metadataに保存
+-- 
+-- 新規登録例:
+-- supabase.auth.signUp({
+--   email: 'user@example.com',
+--   password: 'password',
+--   options: {
+--     data: {
+--       username: 'myusername',
+--       display_name: 'My Display Name',
+--       theme_preference: 'cute'
+--     }
+--   }
+-- })
+--
+-- プロファイル更新例:
+-- supabase.auth.updateUser({
+--   data: { theme_preference: 'cool' }
+-- })
 ```
 
 #### 2. **chat_rooms テーブル**
@@ -232,7 +238,7 @@ CREATE TABLE chat_rooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100),
     room_type VARCHAR(20) DEFAULT '1on1',
-    created_by UUID REFERENCES users(id),
+    created_by UUID REFERENCES auth.users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -248,7 +254,7 @@ CREATE POLICY "Users can view joined rooms" ON chat_rooms FOR SELECT
 CREATE TABLE room_participants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     room_id UUID REFERENCES chat_rooms(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     role VARCHAR(20) DEFAULT 'member',
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     last_read_at TIMESTAMP WITH TIME ZONE,
@@ -266,7 +272,7 @@ CREATE POLICY "Users can view own participation" ON room_participants FOR SELECT
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     room_id UUID REFERENCES chat_rooms(id) ON DELETE CASCADE,
-    sender_id UUID REFERENCES users(id),
+    sender_id UUID REFERENCES auth.users(id),
     content TEXT,
     message_type VARCHAR(20) DEFAULT 'text',
     metadata JSONB DEFAULT '{}',
@@ -289,7 +295,7 @@ CREATE POLICY "Users can insert messages in joined rooms" ON messages FOR INSERT
 CREATE TABLE reactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     reaction_type VARCHAR(20) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(message_id, user_id, reaction_type)
@@ -338,19 +344,9 @@ npm install -g supabase
 -- SQL Editor で実行
 -- テーブル作成 (上記のテーブル定義を使用)
 
--- 初期データ挿入
-INSERT INTO users (id, email, username, display_name) VALUES
-('00000000-0000-0000-0000-000000000001', 'demo@example.com', 'demo', 'Demo User'),
-('00000000-0000-0000-0000-000000000002', 'partner@example.com', 'partner', 'Partner User');
-
--- デモルーム作成
-INSERT INTO chat_rooms (id, name, created_by) VALUES
-('00000000-0000-0000-0000-000000000001', 'Demo Chat', '00000000-0000-0000-0000-000000000001');
-
--- 参加者追加
-INSERT INTO room_participants (room_id, user_id, role) VALUES
-('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'admin'),
-('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'member');
+-- 注意: ユーザー情報はauth.usersテーブルに保存されます
+-- 新規登録はSupabase Authのsignup APIで行います
+-- 初期データ挿入は不要（auth.usersのmetadataで管理）
 ```
 
 #### **Step 3: 認証設定**
@@ -450,8 +446,7 @@ eas submit --platform ios
 CREATE INDEX idx_messages_room_created ON messages(room_id, created_at DESC);
 CREATE INDEX idx_messages_sender ON messages(sender_id);
 CREATE INDEX idx_reactions_message ON reactions(message_id);
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_email ON users(email);
+-- auth.usersのインデックスは不要（Supabaseが管理）
 
 -- パフォーマンス監視
 SELECT * FROM pg_stat_user_tables WHERE relname IN ('messages', 'users', 'chat_rooms');
@@ -460,7 +455,7 @@ SELECT * FROM pg_stat_user_tables WHERE relname IN ('messages', 'users', 'chat_r
 #### **Step 2: セキュリティ強化**
 ```sql
 -- Row Level Security 有効化 (全テーブル)
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+-- 注意: auth.usersテーブルはSupabaseが管理
 ALTER TABLE chat_rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE room_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
@@ -616,7 +611,7 @@ const MessageBubble = React.memo(({ message }) => {
 // 接続状態確認
 const checkSupabaseConnection = async () => {
   try {
-    const { data, error } = await supabase.from('users').select('count');
+    const { data, error } = await supabase.from('chat_rooms').select('count');
     if (error) throw error;
     console.log('✅ Supabase connected');
   } catch (error) {
@@ -642,11 +637,73 @@ supabase.auth.onAuthStateChange((event, session) => {
 });
 ```
 
+#### **4. 新規登録エラー "アカウント作成に失敗しました"**
+**原因**: usersテーブルがauth.usersと連携していない、またはINSERTポリシーが不足
+
+**解決策**:
+⚡ **現在はauth.usersのみ使用** - 独自usersテーブルは不要
+
+```typescript
+// 新規登録例 (useAuth.ts)
+const { data, error } = await supabase.auth.signUp({
+  email: userData.email,
+  password: userData.password,
+  options: {
+    data: {
+      username: userData.username,
+      display_name: userData.displayName || userData.username,
+      theme_preference: 'cute'
+    }
+  }
+});
+
+// プロファイル更新例
+const { data, error } = await supabase.auth.updateUser({
+  data: { theme_preference: 'cool' }
+});
+
+// ユーザー情報取得例
+const username = user?.user_metadata?.username;
+const theme = user?.user_metadata?.theme_preference || 'cute';
+```
+
+#### **5. EAS Buildエラー "react-native-mmkv compilation failed"**
+**原因**: React Native新アーキテクチャとの互換性問題
+
+**解決策**:
+```json
+// app.json
+"newArchEnabled": false
+```
+```json
+// package.json から削除
+// "react-native-mmkv": "^3.0.2"
+```
+
 ### 🔍 **デバッグ手順**
 1. **ログ確認**: `npx expo logs`
 2. **ネットワーク**: React Native Debugger
 3. **データベース**: Supabase Dashboard → Logs
 4. **パフォーマンス**: Flipper使用
+
+### 🗂️ **データベース管理**
+
+#### **完全リセット**
+```bash
+# Supabase SQL Editorで実行
+cat supabase/reset.sql  # 全テーブル削除
+cat supabase/config.sql # テーブル再作成
+```
+
+#### **部分的リセット（データのみ削除）**
+```sql
+-- テーブル構造は保持してデータのみ削除
+TRUNCATE TABLE reactions RESTART IDENTITY CASCADE;
+TRUNCATE TABLE messages RESTART IDENTITY CASCADE;
+TRUNCATE TABLE room_participants RESTART IDENTITY CASCADE;
+TRUNCATE TABLE chat_rooms RESTART IDENTITY CASCADE;
+-- 注意: auth.usersテーブルは使用しません（Supabaseが管理）
+```
 
 ## 📚 参考資料
 

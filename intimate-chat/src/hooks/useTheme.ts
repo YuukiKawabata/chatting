@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Theme, ThemeName } from '../types';
 import { themes, getTheme } from '../styles/themes';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const THEME_STORAGE_KEY = 'selected_theme';
 
@@ -14,7 +14,7 @@ export const useTheme = () => {
   useEffect(() => {
     const loadSavedTheme = async () => {
       try {
-        const savedTheme = await SecureStore.getItemAsync(THEME_STORAGE_KEY);
+        const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
         if (savedTheme && savedTheme in themes) {
           const themeName = savedTheme as ThemeName;
           setCurrentTheme(themeName);
@@ -36,7 +36,7 @@ export const useTheme = () => {
       setTheme(getTheme(themeName));
       
       // Save to storage
-      await SecureStore.setItemAsync(THEME_STORAGE_KEY, themeName);
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, themeName);
     } catch (error) {
       console.error('Failed to save theme:', error);
     }

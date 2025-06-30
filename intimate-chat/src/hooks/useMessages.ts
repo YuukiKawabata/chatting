@@ -5,9 +5,17 @@ import { Database } from '../lib/supabase';
 import { useRealtime } from './useRealtime';
 import { useAuth } from './useAuth';
 
-// データベース型定義
+// データベース型定義（auth.usersベース）
 type Message = Database['public']['Tables']['messages']['Row'] & {
-  sender?: Database['public']['Tables']['users']['Row'];
+  sender?: {
+    id: string;
+    email: string;
+    user_metadata?: {
+      username?: string;
+      display_name?: string;
+      theme_preference?: string;
+    };
+  };
   reactions?: Database['public']['Tables']['reactions']['Row'][];
 };
 
@@ -184,35 +192,55 @@ export const useMessages = (roomId: string | null) => {
     return () => clearInterval(interval);
   }, []);
 
-  // ユーザー情報取得ヘルパー
+  // ユーザー情報取得ヘルパー（auth.usersベース）
   const fetchUserInfo = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, username, display_name')
-        .eq('id', userId)
-        .single();
+      // auth.usersから直接ユーザー情報を取得する方法はSupabaseクライアントでは制限されているため
+      // 代替として、ローカルキャッシュまたはuser_metadataを使用
+      if (userId === currentUserId && user) {
+        return {
+          id: user.id,
+          username: user.user_metadata?.username || 'Unknown',
+          display_name: user.user_metadata?.display_name || user.user_metadata?.username || 'Unknown'
+        };
+      }
       
-      if (error) throw error;
-      return data;
+      // 他のユーザーの場合はデフォルト値を返す
+      return {
+        id: userId,
+        username: 'User',
+        display_name: 'User'
+      };
     } catch (error) {
       console.error('Failed to fetch user info:', error);
       return null;
     }
   };
 
-  // メッセージと送信者情報を取得
+  // メッセージと送信者情報を取得（auth.usersベース）
   const fetchMessageWithSender = async (message: Message): Promise<Message> => {
     if (!message.sender_id) return message;
 
     try {
-      const { data: sender, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', message.sender_id)
-        .single();
-
-      if (error) throw error;
+      // 送信者情報を構築（auth.usersベース）
+      let sender;
+      if (message.sender_id === currentUserId && user) {
+        sender = {
+          id: user.id,
+          email: user.email || '',
+          user_metadata: user.user_metadata
+        };
+      } else {
+        // 他のユーザーの場合はデフォルト値
+        sender = {
+          id: message.sender_id,
+          email: '',
+          user_metadata: {
+            username: 'User',
+            display_name: 'User'
+          }
+        };
+      }
 
       return { ...message, sender };
     } catch (error) {
@@ -229,11 +257,11 @@ export const useMessages = (roomId: string | null) => {
     setError(null);
 
     try {
+      // auth.usersベースのため、送信者情報は別途取得
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select(`
           *,
-          sender:users(*),
           reactions(*)
         `)
         .eq('room_id', roomId)
@@ -243,10 +271,15 @@ export const useMessages = (roomId: string | null) => {
 
       if (error) throw error;
 
+      // 各メッセージに送信者情報を追加
+      const enrichedMessages = await Promise.all(
+        (messagesData || []).map(message => fetchMessageWithSender(message))
+      );
+
       if (offset === 0) {
-        setMessages(messagesData || []);
+        setMessages(enrichedMessages);
       } else {
-        setMessages(prev => [...prev, ...(messagesData || [])]);
+        setMessages(prev => [...prev, ...enrichedMessages]);
       }
     } catch (error: any) {
       setError(error.message || 'メッセージの読み込みに失敗しました');

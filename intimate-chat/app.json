@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -33,7 +33,9 @@
     "extra": {
       "eas": {
         "projectId": "63323905-04b3-48e8-969f-7627a4435536"
-      }
+      },
+      "supabaseUrl": "https://fgsjwjsmwaipxoticuqa.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZnc2p3anNtd2FpcHhvdGljdXFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTExNzI2OTMsImV4cCI6MjA2Njc0ODY5M30.kP_xXBp5lfUP3AZaa8Gc6XKMc9SzYleevydnuj3SyCY"
     }
   }
 }

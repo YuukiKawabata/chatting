@@ -38,7 +38,15 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 // デモ用のルームID - 実際のアプリでは動的に設定
 const DEMO_ROOM_ID = '00000000-0000-0000-0000-000000000001';
 
-export const ChatScreen: React.FC = () => {
+interface ChatScreenProps {
+  roomId?: string | null;
+  onBackToHome?: () => void;
+}
+
+export const ChatScreen: React.FC<ChatScreenProps> = ({ 
+  roomId = DEMO_ROOM_ID, 
+  onBackToHome 
+}) => {
   // Hooks
   const { user, logout, updateOnlineStatus } = useAuth();
   const { currentTheme, theme, changeTheme } = useTheme();
@@ -51,6 +59,7 @@ export const ChatScreen: React.FC = () => {
   const { 
     isConnected, 
     connectionStatus,
+    error: realtimeError,
     sendTouchPosition, 
     updatePresence 
   } = useRealtime();
@@ -65,7 +74,7 @@ export const ChatScreen: React.FC = () => {
     addReaction,
     deleteReaction,
     markAsRead 
-  } = useMessages(DEMO_ROOM_ID);
+  } = useMessages(roomId);
 
   // State
   const [currentInput, setCurrentInput] = useState('');
@@ -141,9 +150,16 @@ export const ChatScreen: React.FC = () => {
   // エラーハンドリング
   useEffect(() => {
     if (error) {
-      Alert.alert('エラー', error);
+      Alert.alert('メッセージエラー', error);
     }
   }, [error]);
+
+  // リアルタイム接続エラーハンドリング
+  useEffect(() => {
+    if (realtimeError) {
+      Alert.alert('接続エラー', realtimeError);
+    }
+  }, [realtimeError]);
 
   // メッセージ送信ハンドラー
   const handleSendMessage = useCallback(async (message: string) => {
@@ -206,6 +222,14 @@ export const ChatScreen: React.FC = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowThemeSelector(!showThemeSelector);
   }, [showThemeSelector]);
+
+  // 戻るボタンハンドラー
+  const handleBack = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (onBackToHome) {
+      onBackToHome();
+    }
+  }, [onBackToHome]);
 
   // ログアウトハンドラー
   const handleLogout = useCallback(() => {
@@ -308,6 +332,19 @@ export const ChatScreen: React.FC = () => {
             </View>
             
             <View style={styles.headerRight}>
+              {onBackToHome && (
+                <TouchableOpacity
+                  style={styles.headerButton}
+                  onPress={handleBack}
+                >
+                  <Feather 
+                    name="arrow-left" 
+                    size={24} 
+                    color={theme.colors.text.primary} 
+                  />
+                </TouchableOpacity>
+              )}
+              
               <TouchableOpacity
                 style={styles.headerButton}
                 onPress={handleThemePress}

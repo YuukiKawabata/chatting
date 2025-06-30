@@ -97,19 +97,36 @@ export const LoginScreen: React.FC = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      await register({
+      const result = await register({
         email: formData.email.trim(),
         password: formData.password,
         username: formData.username.trim(),
         displayName: formData.displayName.trim() || formData.username.trim(),
       });
       
+      console.log('📝 登録結果:', {
+        hasUser: !!result.user,
+        hasSession: !!result.session,
+        userConfirmed: result.user?.email_confirmed_at
+      });
+      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        '登録完了', 
-        'アカウントが正常に作成されました！',
-        [{ text: 'OK' }]
-      );
+      
+      if (result.user && !result.session) {
+        // メール確認が必要な場合
+        Alert.alert(
+          '登録完了', 
+          'アカウントが作成されました。\n確認メールをお送りしましたので、メール内のリンクをクリックしてアカウントを有効化してください。\n\n開発中のため、メール確認を無効化することも可能です。',
+          [{ text: 'OK' }]
+        );
+      } else if (result.session) {
+        // 即座にログイン状態になる場合
+        Alert.alert(
+          '登録完了', 
+          'アカウントが正常に作成され、ログインしました！',
+          [{ text: 'OK' }]
+        );
+      }
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       
