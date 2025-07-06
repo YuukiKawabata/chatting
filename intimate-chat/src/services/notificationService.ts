@@ -14,6 +14,8 @@ if (!isExpoGo) {
       shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
     }),
   });
 }
@@ -169,7 +171,7 @@ export class NotificationService {
         content: {
           title,
           body,
-          data: data || {},
+          data: data ? { ...data as unknown as Record<string, unknown> } : undefined,
           sound: 'default',
         },
         trigger: null, // 即座に送信
@@ -287,7 +289,7 @@ export class NotificationService {
     const responseListener = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         console.log('Notification response:', response);
-        const data = response.notification.request.content.data as NotificationData;
+        const data = response.notification.request.content.data as unknown as NotificationData;
         
         // 通知タイプに応じた画面遷移やアクション
         this.handleNotificationResponse(data);

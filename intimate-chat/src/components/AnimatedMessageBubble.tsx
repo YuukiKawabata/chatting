@@ -12,8 +12,26 @@ import { Feather } from '@expo/vector-icons';
 import { Database } from '../lib/supabase';
 
 // Supabaseデータベース型定義
-type Message = Database['public']['Tables']['messages']['Row'] & {
-  sender?: Database['public']['Tables']['users']['Row'];
+type Message = {
+  id: string;
+  room_id: string | null;
+  sender_id: string | null;
+  content: string | null;
+  message_type: string;
+  metadata: any;
+  reply_to: string | null;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  sender?: {
+    id: string;
+    email: string;
+    user_metadata?: {
+      username?: string;
+      display_name?: string;
+      theme_preference?: string;
+    };
+  };
   reactions?: Database['public']['Tables']['reactions']['Row'][];
 };
 
@@ -136,12 +154,12 @@ export const AnimatedMessageBubble: React.FC<AnimatedMessageBubbleProps> = ({
       const existing = reactionMap.get(reaction.reaction_type);
       if (existing) {
         existing.count++;
-        existing.users.push(reaction.user_id);
+        if (reaction.user_id) existing.users.push(reaction.user_id);
       } else {
         reactionMap.set(reaction.reaction_type, {
           type: reaction.reaction_type,
           count: 1,
-          users: [reaction.user_id]
+          users: reaction.user_id ? [reaction.user_id] : []
         });
       }
     });
@@ -196,7 +214,7 @@ export const AnimatedMessageBubble: React.FC<AnimatedMessageBubbleProps> = ({
   };
 
   const bubbleStyle = {
-    alignSelf: isOwn ? 'flex-end' : 'flex-start',
+    alignSelf: isOwn ? 'flex-end' as const : 'flex-start' as const,
   };
 
   const reactions = aggregateReactions();
@@ -287,7 +305,7 @@ export const AnimatedMessageBubble: React.FC<AnimatedMessageBubbleProps> = ({
         {/* 送信者名（自分のメッセージでない場合のみ） */}
         {!isOwn && message.sender && (
           <Text style={[styles.senderText, { color: theme.colors.text.secondary }]}>
-            {message.sender.display_name || message.sender.username}
+            {message.sender.user_metadata?.display_name || message.sender.user_metadata?.username}
           </Text>
         )}
         

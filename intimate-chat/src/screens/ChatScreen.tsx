@@ -311,7 +311,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                   colors={[theme.colors.primary, theme.colors.secondary]}
                   style={styles.avatar}
                 >
-                  <Text style={styles.avatarText}>{user?.display_name?.charAt(0) || '愛'}</Text>
+                  <Text style={styles.avatarText}>{user?.user_metadata?.display_name?.charAt(0) || '愛'}</Text>
                 </LinearGradient>
                 <View 
                   style={[
@@ -323,7 +323,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
               
               <View style={styles.userInfo}>
                 <Text style={[styles.userName, { color: theme.colors.text.primary }]}>
-                  {user?.display_name || '愛しの人'}
+                  {user?.user_metadata?.display_name || '愛しの人'}
                 </Text>
                 <Text style={[styles.userStatus, { color: theme.colors.text.secondary }]}>
                   {getConnectionStatusText()}
