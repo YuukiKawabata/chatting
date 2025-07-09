@@ -35,6 +35,9 @@ export const useMessages = (roomId: string | null) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // メッセージの自動削除タイマーを管理
+  const messageTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  
   const { user } = useAuth();
   const {
     sendMessage: realtimeSendMessage,
@@ -51,6 +54,31 @@ export const useMessages = (roomId: string | null) => {
 
   const currentUserId = user?.id;
   const unsubscribeRefs = useRef<(() => void)[]>([]);
+
+  // メッセージの自動削除機能（30秒後）
+  const scheduleMessageRemoval = useCallback((messageId: string) => {
+    // 既存のタイマーがあれば削除
+    const existingTimer = messageTimers.current.get(messageId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // 30秒後にメッセージを削除
+    const timer = setTimeout(() => {
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      messageTimers.current.delete(messageId);
+    }, 30000); // 30秒
+
+    messageTimers.current.set(messageId, timer);
+  }, []);
+
+  // コンポーネントアンマウント時にタイマーをクリア
+  useEffect(() => {
+    return () => {
+      messageTimers.current.forEach(timer => clearTimeout(timer));
+      messageTimers.current.clear();
+    };
+  }, []);
 
   // ルーム参加・退出管理
   useEffect(() => {
@@ -97,9 +125,14 @@ export const useMessages = (roomId: string | null) => {
             
             // 時間順でソート挿入
             const newMessages = [...prev, enrichedMessage];
-            return newMessages.sort((a, b) => 
+            const sortedMessages = newMessages.sort((a, b) => 
               new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             );
+            
+            // 新しいメッセージの自動削除をスケジュール
+            scheduleMessageRemoval(enrichedMessage.id);
+            
+            return sortedMessages;
           });
         });
       }
@@ -249,15 +282,15 @@ export const useMessages = (roomId: string | null) => {
     }
   };
 
-  // 初期メッセージ読み込み
-  const loadMessages = useCallback(async (limit: number = 50, offset: number = 0) => {
+  // 初期メッセージ読み込み（一時的メッセージ用に制限）
+  const loadMessages = useCallback(async (limit: number = 10, offset: number = 0) => {
     if (!roomId) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      // auth.usersベースのため、送信者情報は別途取得
+      // 最新のメッセージのみ取得（過去のメッセージは非表示）
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select(`
@@ -266,6 +299,7 @@ export const useMessages = (roomId: string | null) => {
         `)
         .eq('room_id', roomId)
         .eq('is_deleted', false)
+        .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()) // 5分以内のメッセージのみ
         .order('created_at', { ascending: true })
         .range(offset, offset + limit - 1);
 
@@ -278,8 +312,17 @@ export const useMessages = (roomId: string | null) => {
 
       if (offset === 0) {
         setMessages(enrichedMessages);
+        // 既存メッセージにも自動削除をスケジュール
+        enrichedMessages.forEach(message => {
+          const messageAge = Date.now() - new Date(message.created_at).getTime();
+          const remainingTime = Math.max(30000 - messageAge, 1000); // 最低1秒
+          setTimeout(() => {
+            setMessages(prev => prev.filter(m => m.id !== message.id));
+          }, remainingTime);
+        });
       } else {
         setMessages(prev => [...prev, ...enrichedMessages]);
+        enrichedMessages.forEach(message => scheduleMessageRemoval(message.id));
       }
     } catch (error: any) {
       setError(error.message || 'メッセージの読み込みに失敗しました');
@@ -287,7 +330,7 @@ export const useMessages = (roomId: string | null) => {
     } finally {
       setIsLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, scheduleMessageRemoval]);
 
   // メッセージ送信
   const sendMessage = useCallback(async (content: string, messageType: string = 'text', metadata: any = {}) => {

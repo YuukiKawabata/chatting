@@ -17,16 +17,11 @@ import * as Haptics from 'expo-haptics';
 
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { EnhancedThemeSelector } from '../components';
+import { EnhancedThemeSelector, PartnerInviteModal, CreateRoomModal } from '../components';
 import { supabase } from '../lib/supabase';
+import { inviteService, Invitation, Partnership } from '../services/inviteService';
+import { roomService, ChatRoom } from '../services/roomService';
 
-interface ChatRoom {
-  id: string;
-  name: string;
-  room_type: string;
-  created_at: string;
-  participant_count: number;
-}
 
 interface HomeScreenProps {
   onJoinRoom: (roomId: string) => void;
@@ -36,6 +31,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showThemeSelector, setShowThemeSelector] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [currentInvite, setCurrentInvite] = useState<Invitation | null>(null);
+  const [partnerships, setPartnerships] = useState<Partnership[]>([]);
+  const [isInviteLoading, setIsInviteLoading] = useState(false);
 
   const { user, logout } = useAuth();
   const { theme, currentTheme, changeTheme } = useTheme();
@@ -52,25 +52,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
   const loadRooms = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('chat_rooms')
-        .select(`
-          id,
-          name,
-          room_type,
-          created_at,
-          room_participants(count)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const roomsWithCounts = (data || []).map(room => ({
-        ...room,
-        participant_count: room.room_participants?.length || 0
-      }));
-
-      setRooms(roomsWithCounts);
+      console.log('Loading rooms...');
+      const roomsData = await roomService.getRooms();
+      console.log('Rooms loaded:', roomsData.length);
+      setRooms(roomsData);
     } catch (error) {
       console.error('Failed to load rooms:', error);
       Alert.alert('エラー', 'ルーム一覧の取得に失敗しました');
@@ -81,61 +66,57 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
 
   useEffect(() => {
     loadRooms();
+    loadInviteData();
   }, []);
 
-  // 新しいルームを作成
-  const createRoom = async () => {
+  // 招待データを読み込み
+  const loadInviteData = async () => {
+    setIsInviteLoading(true);
+    try {
+      const [invite, partnershipList] = await Promise.all([
+        inviteService.getCurrentInvitation(),
+        inviteService.getPartnerships(),
+      ]);
+      
+      setCurrentInvite(invite);
+      setPartnerships(partnershipList);
+    } catch (error) {
+      console.error('Failed to load invite data:', error);
+    } finally {
+      setIsInviteLoading(false);
+    }
+  };
+
+  // 新しいルーム作成ボタンのハンドラー
+  const handleCreateRoomPress = () => {
+    console.log('Create room button pressed');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowCreateRoomModal(true);
+  };
 
-    Alert.prompt(
-      'ルーム作成',
-      'ルーム名を入力してください',
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '作成',
-          onPress: async (roomName) => {
-            if (!roomName?.trim()) return;
-
-            try {
-              const { data: roomData, error: roomError } = await supabase
-                .from('chat_rooms')
-                .insert({
-                  name: roomName.trim(),
-                  room_type: '1on1',
-                  created_by: user?.id,
-                })
-                .select()
-                .single();
-
-              if (roomError) throw roomError;
-
-              // 作成者を参加者として追加
-              const { error: participantError } = await supabase
-                .from('room_participants')
-                .insert({
-                  room_id: roomData.id,
-                  user_id: user?.id,
-                  role: 'admin',
-                });
-
-              if (participantError) throw participantError;
-
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert('成功', 'ルームが作成されました！');
-              loadRooms(); // ルーム一覧を再読み込み
-            } catch (error) {
-              console.error('Failed to create room:', error);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              Alert.alert('エラー', 'ルームの作成に失敗しました');
-            }
-          },
-        },
-      ],
-      'plain-text',
-      '',
-      'default'
-    );
+  // ルーム作成処理
+  const handleCreateRoom = async (roomName: string) => {
+    try {
+      console.log('Creating room with name:', roomName);
+      const result = await roomService.createRoom(roomName.trim());
+      
+      if (result.success) {
+        console.log('Room created successfully:', result.room);
+        await loadRooms(); // ルーム一覧を再読み込み
+        
+        // 作成したルームに自動で参加
+        if (result.room) {
+          onJoinRoom(result.room.id);
+        }
+      } else {
+        throw new Error(result.error || 'ルームの作成に失敗しました');
+      }
+    } catch (error) {
+      console.error('Failed to create room:', error);
+      const errorMessage = error instanceof Error ? error.message : 'ルームの作成に失敗しました';
+      Alert.alert('エラー', errorMessage);
+      throw error; // モーダルでエラーハンドリングするために再スロー
+    }
   };
 
   // ルームに参加
@@ -143,33 +124,66 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      // 既に参加しているかチェック
-      const { data: existingParticipant } = await supabase
-        .from('room_participants')
-        .select('id')
-        .eq('room_id', roomId)
-        .eq('user_id', user?.id)
-        .single();
-
-      if (!existingParticipant) {
-        // 参加者として追加
-        const { error } = await supabase
-          .from('room_participants')
-          .insert({
-            room_id: roomId,
-            user_id: user?.id,
-            role: 'member',
-          });
-
-        if (error) throw error;
+      console.log('Joining room:', { roomId, roomName });
+      const result = await roomService.joinRoom(roomId);
+      
+      if (result.success) {
+        console.log('Successfully joined room, navigating to chat');
+        // チャット画面に遷移
+        onJoinRoom(roomId);
+      } else {
+        throw new Error(result.error || 'ルームへの参加に失敗しました');
       }
-
-      // チャット画面に遷移
-      onJoinRoom(roomId);
     } catch (error) {
       console.error('Failed to join room:', error);
-      Alert.alert('エラー', 'ルームへの参加に失敗しました');
+      const errorMessage = error instanceof Error ? error.message : 'ルームへの参加に失敗しました';
+      Alert.alert('エラー', errorMessage);
     }
+  };
+
+  // 招待作成
+  const handleCreateInvite = async (): Promise<Invitation> => {
+    try {
+      const invitation = await inviteService.createInvitation();
+      setCurrentInvite(invitation);
+      return invitation;
+    } catch (error) {
+      console.error('Failed to create invite:', error);
+      throw error;
+    }
+  };
+
+  // 招待受諾
+  const handleAcceptInvite = async (code: string): Promise<boolean> => {
+    try {
+      const result = await inviteService.acceptInvitation(code);
+      if (result.success) {
+        await loadInviteData(); // データを再読み込み
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to accept invite:', error);
+      return false;
+    }
+  };
+
+  // 招待キャンセル
+  const handleCancelInvite = async (inviteId: string): Promise<boolean> => {
+    try {
+      await inviteService.cancelInvitation(inviteId);
+      setCurrentInvite(null);
+      return true;
+    } catch (error) {
+      console.error('Failed to cancel invite:', error);
+      return false;
+    }
+  };
+
+  // 招待モーダルを開く
+  const handleInviteModalOpen = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowInviteModal(true);
   };
 
   // ログアウト処理
@@ -237,6 +251,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
             <View style={styles.headerActions}>
               <TouchableOpacity
                 style={[styles.iconButton, { backgroundColor: theme.colors.background.card }]}
+                onPress={handleInviteModalOpen}
+              >
+                <Feather name="user-plus" size={20} color={theme.colors.text.primary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.iconButton, { backgroundColor: theme.colors.background.card }]}
                 onPress={() => setShowThemeSelector(true)}
               >
                 <Feather name="settings" size={20} color={theme.colors.text.primary} />
@@ -274,10 +295,45 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
               </Text>
             </View>
 
+            {/* Partnership Section */}
+            {partnerships.length > 0 && (
+              <View style={styles.partnershipSection}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
+                  パートナー
+                </Text>
+                {partnerships.map((partnership) => (
+                  <TouchableOpacity
+                    key={partnership.id}
+                    style={[styles.partnerCard, { backgroundColor: theme.colors.background.card }]}
+                    onPress={() => {
+                      // パートナーとの専用ルームに遷移
+                      onJoinRoom(`partner-${partnership.id}`);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.partnerAvatar, { backgroundColor: theme.colors.primary }]}>
+                      <Text style={styles.partnerAvatarText}>
+                        {partnership.partner_name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.partnerInfo}>
+                      <Text style={[styles.partnerName, { color: theme.colors.text.primary }]}>
+                        {partnership.partner_name}
+                      </Text>
+                      <Text style={[styles.partnerStatus, { color: theme.colors.text.secondary }]}>
+                        @{partnership.partner_username} • パートナー
+                      </Text>
+                    </View>
+                    <Feather name="message-circle" size={24} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             {/* Create Room Button */}
             <TouchableOpacity
               style={styles.createButton}
-              onPress={createRoom}
+              onPress={handleCreateRoomPress}
               activeOpacity={0.8}
             >
               <LinearGradient
@@ -343,6 +399,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
           onThemeChange={changeTheme}
           visible={showThemeSelector}
           onClose={() => setShowThemeSelector(false)}
+        />
+
+        {/* Create Room Modal */}
+        <CreateRoomModal
+          visible={showCreateRoomModal}
+          theme={theme}
+          onClose={() => setShowCreateRoomModal(false)}
+          onCreateRoom={handleCreateRoom}
+        />
+
+        {/* Partner Invite Modal */}
+        <PartnerInviteModal
+          visible={showInviteModal}
+          theme={theme}
+          onClose={() => setShowInviteModal(false)}
+          onCreateInvite={handleCreateInvite}
+          onAcceptInvite={handleAcceptInvite}
+          onCancelInvite={handleCancelInvite}
+          currentInvite={currentInvite}
+          partnerships={partnerships}
+          isLoading={isInviteLoading}
         />
       </LinearGradient>
     </>
@@ -508,6 +585,46 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   roomDetails: {
+    fontSize: 14,
+    opacity: 0.8,
+  },
+  partnershipSection: {
+    marginBottom: 24,
+  },
+  partnerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  partnerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  partnerAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  partnerInfo: {
+    flex: 1,
+  },
+  partnerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  partnerStatus: {
     fontSize: 14,
     opacity: 0.8,
   },

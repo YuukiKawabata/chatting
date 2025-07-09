@@ -1,41 +1,24 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
-  SafeAreaView,
+  TextInput,
   TouchableOpacity,
-  StatusBar,
-  Alert,
-  Dimensions,
-  GestureResponderEvent,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
-import {
-  AnimatedMessageBubble,
-  InputArea,
-  AnimatedReactionPicker,
-  EnhancedThemeSelector,
-  ConnectionStatus,
-  TouchIndicator,
-} from '../components';
-
 import { useAuth } from '../hooks/useAuth';
 import { useRealtime } from '../hooks/useRealtime';
-import { useMessages } from '../hooks/useMessages';
 import { useTheme } from '../hooks/useTheme';
-import { useNotifications } from '../hooks/useNotifications';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// デモ用のルームID - 実際のアプリでは動的に設定
+// デモ用のルームID
 const DEMO_ROOM_ID = '00000000-0000-0000-0000-000000000001';
 
 interface ChatScreenProps {
@@ -48,180 +31,78 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
   onBackToHome 
 }) => {
   // Hooks
-  const { user, logout, updateOnlineStatus } = useAuth();
-  const { currentTheme, theme, changeTheme } = useTheme();
-  const { 
-    notifyNewMessage,
-    notifyNewReaction,
-    notifyTouchPosition,
-    clearBadgeCount,
-  } = useNotifications();
+  const { user, logout } = useAuth();
+  const { currentTheme, theme } = useTheme();
   const { 
     isConnected, 
-    connectionStatus,
-    error: realtimeError,
-    sendTouchPosition, 
-    updatePresence 
+    updateTyping, 
+    stopTyping,
+    onTypingUpdate,
+    joinRoom,
+    leaveRoom,
   } = useRealtime();
-  
-  const { 
-    messages, 
-    typingUsers, 
-    isLoading,
-    error,
-    sendMessage, 
-    handleTyping, 
-    addReaction,
-    deleteReaction,
-    markAsRead 
-  } = useMessages(roomId);
 
   // State
-  const [currentInput, setCurrentInput] = useState('');
-  const [showThemeSelector, setShowThemeSelector] = useState(false);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-  const [touchPosition, setTouchPosition] = useState<{ x: number; y: number; userId: string } | null>(null);
+  const [myInput, setMyInput] = useState('');
+  const [partnerInput, setPartnerInput] = useState('');
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
 
-  // Refs
-  const scrollViewRef = useRef<ScrollView>(null);
-
-  // プレゼンス状態管理
+  // ルーム参加・退出管理
   useEffect(() => {
-    if (user) {
-      // オンライン状態に更新
-      updateOnlineStatus?.(true);
-      updatePresence('online');
+    if (!roomId || !user?.id) return;
 
-      // アプリ終了時のクリーンアップ
-      return () => {
-        updateOnlineStatus?.(false);
-        updatePresence('offline');
-      };
-    }
-  }, [user, updateOnlineStatus, updatePresence]);
-
-  // 現在タイピング中のユーザー監視
-  const partnerTyping = typingUsers.length > 0 ? typingUsers[0] : null;
-
-  // メッセージ受信時のスクロール
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages]);
-
-  // 既読状態更新とバッジクリア
-  useEffect(() => {
-    if (messages.length > 0 && user) {
-      markAsRead();
-      clearBadgeCount(); // チャット画面表示時にバッジをクリア
-    }
-  }, [messages, user, markAsRead, clearBadgeCount]);
-
-  // キーボード表示時のスクロール調整
-  useEffect(() => {
-    const keyboardWillShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => {
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+    const setupRoom = async () => {
+      try {
+        await joinRoom(roomId);
+      } catch (error) {
+        console.error('Room setup failed:', error);
       }
-    );
+    };
 
-    const keyboardWillHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      }
-    );
+    setupRoom();
 
     return () => {
-      keyboardWillShowListener.remove();
-      keyboardWillHideListener.remove();
+      leaveRoom(roomId);
     };
-  }, []);
+  }, [roomId, user?.id, joinRoom, leaveRoom]);
 
-  // エラーハンドリング
+  // タイピング状態監視
   useEffect(() => {
-    if (error) {
-      Alert.alert('メッセージエラー', error);
-    }
-  }, [error]);
+    if (!roomId || !user?.id) return;
 
-  // リアルタイム接続エラーハンドリング
-  useEffect(() => {
-    if (realtimeError) {
-      Alert.alert('接続エラー', realtimeError);
-    }
-  }, [realtimeError]);
+    const typingUnsubscribe = onTypingUpdate(roomId, (payload) => {
+      const typingData = payload.new;
+      
+      if (typingData.user_id === user.id) return; // 自分のタイピングは無視
 
-  // メッセージ送信ハンドラー
-  const handleSendMessage = useCallback(async (message: string) => {
-    if (!message.trim()) return;
+      if (typingData.is_typing && payload.eventType !== 'DELETE') {
+        // パートナーが入力中
+        setPartnerInput(typingData.content_preview || '');
+        setIsPartnerTyping(true);
+      } else {
+        // パートナーが入力停止
+        setPartnerInput('');
+        setIsPartnerTyping(false);
+      }
+    });
+
+    return typingUnsubscribe;
+  }, [roomId, user?.id, onTypingUpdate]);
+
+  // 自分の入力変更ハンドラー
+  const handleMyInputChange = useCallback(async (text: string) => {
+    setMyInput(text);
     
     try {
-      await sendMessage(message.trim());
-      setCurrentInput('');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      console.error('Message send failed:', error);
-    }
-  }, [sendMessage]);
-
-  // 入力変更ハンドラー
-  const handleInputChange = useCallback((text: string) => {
-    setCurrentInput(text);
-    handleTyping(text);
-  }, [handleTyping]);
-
-  // リアクション選択ハンドラー
-  const handleReactionPress = useCallback((messageId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedMessageId(messageId);
-    setShowReactionPicker(true);
-  }, []);
-
-  // リアクション追加/削除ハンドラー
-  const handleSelectReaction = useCallback(async (reactionType: string) => {
-    if (!selectedMessageId) return;
-
-    try {
-      // 既存のリアクションをチェック
-      const message = messages.find(m => m.id === selectedMessageId);
-      const existingReaction = message?.reactions?.find(
-        r => r.user_id === user?.id && r.reaction_type === reactionType
-      );
-
-      if (existingReaction) {
-        // 既存のリアクションを削除
-        await deleteReaction(selectedMessageId, reactionType);
+      if (text.trim()) {
+        await updateTyping(roomId!, text);
       } else {
-        // 新しいリアクションを追加
-        await addReaction(selectedMessageId, reactionType);
+        await stopTyping(roomId!);
       }
-
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      console.error('Reaction failed:', error);
+      console.error('Failed to update typing status:', error);
     }
-
-    setShowReactionPicker(false);
-    setSelectedMessageId(null);
-  }, [selectedMessageId, messages, user?.id, addReaction, deleteReaction]);
-
-  // テーマ選択ハンドラー
-  const handleThemePress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowThemeSelector(!showThemeSelector);
-  }, [showThemeSelector]);
+  }, [roomId, updateTyping, stopTyping]);
 
   // 戻るボタンハンドラー
   const handleBack = useCallback(() => {
@@ -233,60 +114,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
   // ログアウトハンドラー
   const handleLogout = useCallback(() => {
-    Alert.alert(
-      'ログアウト',
-      'ログアウトしますか？',
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        { 
-          text: 'ログアウト', 
-          style: 'destructive', 
-          onPress: async () => {
-            try {
-              await updateOnlineStatus?.(false);
-              await updatePresence('offline');
-              await logout();
-            } catch (error) {
-              console.error('Logout failed:', error);
-            }
-          }
-        },
-      ]
-    );
-  }, [logout, updateOnlineStatus, updatePresence]);
-
-  // 画面タッチハンドラー（タッチ位置共有）
-  const handleScreenTouch = useCallback(async (event: GestureResponderEvent) => {
-    const { locationX, locationY } = event.nativeEvent;
-    
-    try {
-      // タッチ位置をパートナーに送信
-      await sendTouchPosition(DEMO_ROOM_ID, locationX, locationY);
-      
-      // ローカルでタッチエフェクト表示
-      setTouchPosition({
-        x: locationX,
-        y: locationY,
-        userId: user?.id || '',
-      });
-
-      // ハプティクフィードバック
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      // 1.5秒後にエフェクトを非表示
-      setTimeout(() => setTouchPosition(null), 1500);
-    } catch (error) {
-      console.error('Touch position send failed:', error);
-    }
-  }, [sendTouchPosition, user?.id]);
-
-  // 接続状態の表示文字列
-  const getConnectionStatusText = () => {
-    if (isLoading) return '接続中...';
-    if (!isConnected) return 'オフライン';
-    if (partnerTyping) return `💭 ${partnerTyping.content ? `"${partnerTyping.content}"` : '入力中...'}`;
-    return '💚 オンライン';
-  };
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    logout();
+  }, [logout]);
 
   return (
     <>
@@ -302,183 +132,123 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         ]}
         style={styles.container}
       >
-        <SafeAreaView style={styles.safeArea}>
-          {/* Header */}
+        <KeyboardAvoidingView 
+          style={styles.keyboardContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          {/* ミニマルヘッダー */}
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-            <View style={styles.headerLeft}>
-              <View style={styles.avatarContainer}>
-                <LinearGradient
-                  colors={[theme.colors.primary, theme.colors.secondary]}
-                  style={styles.avatar}
-                >
-                  <Text style={styles.avatarText}>{user?.user_metadata?.display_name?.charAt(0) || '愛'}</Text>
-                </LinearGradient>
-                <View 
-                  style={[
-                    styles.onlineIndicator,
-                    { backgroundColor: isConnected ? theme.colors.success || '#10B981' : '#6B7280' }
-                  ]} 
-                />
-              </View>
-              
-              <View style={styles.userInfo}>
-                <Text style={[styles.userName, { color: theme.colors.text.primary }]}>
-                  {user?.user_metadata?.display_name || '愛しの人'}
-                </Text>
-                <Text style={[styles.userStatus, { color: theme.colors.text.secondary }]}>
-                  {getConnectionStatusText()}
-                </Text>
-              </View>
-            </View>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={handleBack}
+            >
+              <Feather 
+                name="arrow-left" 
+                size={24} 
+                color={theme.colors.text.primary} 
+              />
+            </TouchableOpacity>
             
-            <View style={styles.headerRight}>
-              {onBackToHome && (
-                <TouchableOpacity
-                  style={styles.headerButton}
-                  onPress={handleBack}
-                >
-                  <Feather 
-                    name="arrow-left" 
-                    size={24} 
-                    color={theme.colors.text.primary} 
-                  />
-                </TouchableOpacity>
-              )}
-              
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={handleThemePress}
-              >
-                <Feather 
-                  name="settings" 
-                  size={24} 
-                  color={theme.colors.text.primary} 
-                />
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={handleLogout}
-              >
-                <Feather 
-                  name="log-out" 
-                  size={24} 
-                  color={theme.colors.text.primary} 
-                />
-              </TouchableOpacity>
+            <View style={styles.connectionStatus}>
+              <View 
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: isConnected ? theme.colors.success || '#10B981' : '#6B7280' }
+                ]} 
+              />
+              <Text style={[styles.statusText, { color: theme.colors.text.secondary }]}>
+                {isConnected ? 'つながっています' : 'オフライン'}
+              </Text>
             </View>
+
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={handleLogout}
+            >
+              <Feather 
+                name="log-out" 
+                size={24} 
+                color={theme.colors.text.primary} 
+              />
+            </TouchableOpacity>
           </View>
 
-          {/* Enhanced Theme Selector */}
-          <EnhancedThemeSelector
-            currentTheme={currentTheme}
-            theme={theme}
-            onThemeChange={changeTheme}
-            visible={showThemeSelector}
-            onClose={() => setShowThemeSelector(false)}
-          />
-
-          {/* Content with Keyboard Avoiding */}
-          <KeyboardAvoidingView 
-            style={styles.keyboardContainer}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-          >
-            {/* Messages Area */}
-            <View style={styles.messagesContainer}>
-              <ScrollView
-                ref={scrollViewRef}
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                onTouchStart={handleScreenTouch}
-                keyboardShouldPersistTaps="handled"
-              >
-                {isLoading && messages.length === 0 ? (
-                  <View style={styles.loadingState}>
-                    <Text style={[styles.loadingText, { color: theme.colors.text.secondary }]}>
-                      メッセージを読み込み中...
-                    </Text>
-                  </View>
-                ) : messages.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Feather 
-                      name="message-circle" 
-                      size={48} 
-                      color={theme.colors.text.secondary}
-                      style={styles.emptyIcon}
-                    />
-                    <Text style={[styles.emptyText, { color: theme.colors.text.secondary }]}>
-                      メッセージを送信して会話を始めましょう ✨
-                    </Text>
-                  </View>
+          {/* メインコンテンツエリア */}
+          <View style={styles.contentArea}>
+            {/* 相手の入力エリア */}
+            <View style={styles.inputSection}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text.secondary }]}>
+                相手の入力
+              </Text>
+              <View style={[
+                styles.inputDisplay, 
+                { 
+                  backgroundColor: theme.colors.background.secondary || theme.colors.background.primary,
+                  borderColor: isPartnerTyping ? theme.colors.primary : theme.colors.border,
+                }
+              ]}>
+                {isPartnerTyping ? (
+                  <Text style={[styles.inputText, { color: theme.colors.text.primary }]}>
+                    {partnerInput || '入力中...'}
+                  </Text>
                 ) : (
-                  messages.map((message, index) => (
-                    <AnimatedMessageBubble
-                      key={message.id}
-                      message={message}
-                      isOwn={message.sender_id === user?.id}
-                      theme={theme}
-                      onReaction={handleReactionPress}
-                      isNew={index === messages.length - 1}
-                    />
-                  ))
+                  <Text style={[styles.placeholderText, { color: theme.colors.text.secondary }]}>
+                    待機中...
+                  </Text>
                 )}
-              </ScrollView>
+                {isPartnerTyping && (
+                  <View style={styles.typingIndicator}>
+                    <View style={[styles.typingDot, { backgroundColor: theme.colors.primary }]} />
+                    <View style={[styles.typingDot, { backgroundColor: theme.colors.primary }]} />
+                    <View style={[styles.typingDot, { backgroundColor: theme.colors.primary }]} />
+                  </View>
+                )}
+              </View>
             </View>
 
-            {/* Input Area */}
-            <InputArea
-              theme={theme}
-              onSendMessage={handleSendMessage}
-              onTyping={handleInputChange}
-              disabled={!isConnected}
-              partnerTyping={partnerTyping?.content || ''}
-              currentInput={currentInput}
-              roomId={DEMO_ROOM_ID}
-            />
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+            {/* 自分の入力エリア */}
+            <View style={styles.inputSection}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text.secondary }]}>
+                あなたの入力
+              </Text>
+              <View style={[
+                styles.inputContainer, 
+                { 
+                  backgroundColor: theme.colors.background.secondary || theme.colors.background.primary,
+                  borderColor: myInput ? theme.colors.primary : theme.colors.border,
+                }
+              ]}>
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    { 
+                      color: theme.colors.text.primary,
+                    }
+                  ]}
+                  value={myInput}
+                  onChangeText={handleMyInputChange}
+                  placeholder="ここに入力してください..."
+                  placeholderTextColor={theme.colors.text.secondary}
+                  multiline
+                  textAlignVertical="top"
+                  maxLength={1000}
+                />
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
 
-        {/* Connection Status */}
-        <ConnectionStatus
-          isConnected={isConnected}
-          isConnecting={connectionStatus === 'CONNECTING'}
-          theme={theme}
-        />
-
-        {/* Touch Indicator */}
-        {touchPosition && (
-          <TouchIndicator
-            x={touchPosition.x}
-            y={touchPosition.y}
-            theme={theme}
-            visible={!!touchPosition}
-          />
-        )}
-
-        {/* Animated Reaction Picker Modal */}
-        <AnimatedReactionPicker
-          visible={showReactionPicker}
-          theme={theme}
-          onSelectReaction={handleSelectReaction}
-          onClose={() => {
-            setShowReactionPicker(false);
-            setSelectedMessageId(null);
-          }}
-        />
-
-        {/* Background Decorations */}
+        {/* 背景装飾 */}
         <View 
           style={[
             styles.backgroundDecoration1,
-            { backgroundColor: theme.colors.primary + '20' }
+            { backgroundColor: theme.colors.primary + '10' }
           ]} 
         />
         <View 
           style={[
             styles.backgroundDecoration2,
-            { backgroundColor: theme.colors.secondary + '20' }
+            { backgroundColor: theme.colors.secondary + '10' }
           ]} 
         />
       </LinearGradient>
@@ -490,106 +260,95 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  safeArea: {
+  keyboardContainer: {
     flex: 1,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   headerButton: {
     padding: 8,
     borderRadius: 20,
   },
-  avatarContainer: {
-    position: 'relative',
-    marginRight: 12,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
+  connectionStatus: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  avatarText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  userStatus: {
+  statusText: {
     fontSize: 14,
-    opacity: 0.8,
+    fontWeight: '500',
   },
-  keyboardContainer: {
+  contentArea: {
     flex: 1,
-  },
-  messagesContainer: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingVertical: 16,
-    minHeight: '100%',
-  },
-  loadingState: {
-    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 40,
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
+    gap: 60,
   },
-  loadingText: {
+  inputSection: {
+    gap: 12,
+  },
+  inputLabel: {
     fontSize: 16,
+    fontWeight: '600',
     textAlign: 'center',
   },
-  emptyState: {
-    flex: 1,
+  inputDisplay: {
+    minHeight: 120,
+    borderRadius: 20,
+    borderWidth: 2,
+    padding: 20,
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
+    position: 'relative',
   },
-  emptyIcon: {
-    marginBottom: 16,
-    opacity: 0.5,
+  inputContainer: {
+    minHeight: 120,
+    borderRadius: 20,
+    borderWidth: 2,
+    padding: 20,
   },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
+  textInput: {
+    fontSize: 18,
     lineHeight: 24,
+    flex: 1,
+    textAlignVertical: 'top',
+  },
+  inputText: {
+    fontSize: 18,
+    lineHeight: 24,
+    textAlign: 'center',
+  },
+  placeholderText: {
+    fontSize: 18,
+    lineHeight: 24,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    opacity: 0.6,
+  },
+  typingIndicator: {
+    position: 'absolute',
+    bottom: 15,
+    right: 20,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  typingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    opacity: 0.7,
   },
   backgroundDecoration1: {
     position: 'absolute',

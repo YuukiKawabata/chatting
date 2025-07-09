@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 // Import screens
 import { LoginScreen, ChatScreen, HomeScreen } from './src/screens';
@@ -21,9 +22,12 @@ export default function App() {
   // Show loading screen while auth is initializing
   if (authLoading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background.primary }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
+      <SafeAreaProvider>
+        <SafeAreaView style={[styles.loadingContainer, { backgroundColor: theme.colors.background.primary }]}>
+          <StatusBar style="auto" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
@@ -42,26 +46,30 @@ export default function App() {
   // Show appropriate screen based on auth state
   if (!user) {
     return (
-      <View style={styles.container}>
-        <StatusBar style="auto" />
-        <LoginScreen />
-      </View>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <StatusBar style="auto" />
+          <LoginScreen />
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   // Authenticated user screens
   return (
-    <View style={styles.container}>
-      <StatusBar style="auto" />
-      {currentScreen === 'home' ? (
-        <HomeScreen onJoinRoom={handleJoinRoom} />
-      ) : (
-        <ChatScreen 
-          roomId={currentRoomId} 
-          onBackToHome={handleBackToHome} 
-        />
-      )}
-    </View>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="auto" />
+        {currentScreen === 'home' ? (
+          <HomeScreen onJoinRoom={handleJoinRoom} />
+        ) : (
+          <ChatScreen 
+            roomId={currentRoomId} 
+            onBackToHome={handleBackToHome} 
+          />
+        )}
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
