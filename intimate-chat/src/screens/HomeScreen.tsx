@@ -17,9 +17,8 @@ import * as Haptics from 'expo-haptics';
 
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { EnhancedThemeSelector, PartnerInviteModal, CreateRoomModal } from '../components';
+import { EnhancedThemeSelector, CreateRoomModal } from '../components';
 import { supabase } from '../lib/supabase';
-import { inviteService, Invitation, Partnership } from '../services/inviteService';
 import { roomService, ChatRoom } from '../services/roomService';
 
 
@@ -31,11 +30,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showThemeSelector, setShowThemeSelector] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
-  const [currentInvite, setCurrentInvite] = useState<Invitation | null>(null);
-  const [partnerships, setPartnerships] = useState<Partnership[]>([]);
-  const [isInviteLoading, setIsInviteLoading] = useState(false);
 
   const { user, logout } = useAuth();
   const { theme, currentTheme, changeTheme } = useTheme();
@@ -66,26 +61,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
 
   useEffect(() => {
     loadRooms();
-    loadInviteData();
   }, []);
-
-  // 招待データを読み込み
-  const loadInviteData = async () => {
-    setIsInviteLoading(true);
-    try {
-      const [invite, partnershipList] = await Promise.all([
-        inviteService.getCurrentInvitation(),
-        inviteService.getPartnerships(),
-      ]);
-      
-      setCurrentInvite(invite);
-      setPartnerships(partnershipList);
-    } catch (error) {
-      console.error('Failed to load invite data:', error);
-    } finally {
-      setIsInviteLoading(false);
-    }
-  };
 
   // 新しいルーム作成ボタンのハンドラー
   const handleCreateRoomPress = () => {
@@ -141,50 +117,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
     }
   };
 
-  // 招待作成
-  const handleCreateInvite = async (): Promise<Invitation> => {
-    try {
-      const invitation = await inviteService.createInvitation();
-      setCurrentInvite(invitation);
-      return invitation;
-    } catch (error) {
-      console.error('Failed to create invite:', error);
-      throw error;
-    }
-  };
-
-  // 招待受諾
-  const handleAcceptInvite = async (code: string): Promise<boolean> => {
-    try {
-      const result = await inviteService.acceptInvitation(code);
-      if (result.success) {
-        await loadInviteData(); // データを再読み込み
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Failed to accept invite:', error);
-      return false;
-    }
-  };
-
-  // 招待キャンセル
-  const handleCancelInvite = async (inviteId: string): Promise<boolean> => {
-    try {
-      await inviteService.cancelInvitation(inviteId);
-      setCurrentInvite(null);
-      return true;
-    } catch (error) {
-      console.error('Failed to cancel invite:', error);
-      return false;
-    }
-  };
-
-  // 招待モーダルを開く
-  const handleInviteModalOpen = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowInviteModal(true);
-  };
 
   // ログアウト処理
   const handleLogout = () => {
@@ -251,13 +183,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
             <View style={styles.headerActions}>
               <TouchableOpacity
                 style={[styles.iconButton, { backgroundColor: theme.colors.background.card }]}
-                onPress={handleInviteModalOpen}
-              >
-                <Feather name="user-plus" size={20} color={theme.colors.text.primary} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.iconButton, { backgroundColor: theme.colors.background.card }]}
                 onPress={() => setShowThemeSelector(true)}
               >
                 <Feather name="settings" size={20} color={theme.colors.text.primary} />
@@ -295,40 +220,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
               </Text>
             </View>
 
-            {/* Partnership Section */}
-            {partnerships.length > 0 && (
-              <View style={styles.partnershipSection}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
-                  パートナー
-                </Text>
-                {partnerships.map((partnership) => (
-                  <TouchableOpacity
-                    key={partnership.id}
-                    style={[styles.partnerCard, { backgroundColor: theme.colors.background.card }]}
-                    onPress={() => {
-                      // パートナーとの専用ルームに遷移
-                      onJoinRoom(`partner-${partnership.id}`);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.partnerAvatar, { backgroundColor: theme.colors.primary }]}>
-                      <Text style={styles.partnerAvatarText}>
-                        {partnership.partner_name.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.partnerInfo}>
-                      <Text style={[styles.partnerName, { color: theme.colors.text.primary }]}>
-                        {partnership.partner_name}
-                      </Text>
-                      <Text style={[styles.partnerStatus, { color: theme.colors.text.secondary }]}>
-                        @{partnership.partner_username} • パートナー
-                      </Text>
-                    </View>
-                    <Feather name="message-circle" size={24} color={theme.colors.primary} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
 
             {/* Create Room Button */}
             <TouchableOpacity
@@ -409,18 +300,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
           onCreateRoom={handleCreateRoom}
         />
 
-        {/* Partner Invite Modal */}
-        <PartnerInviteModal
-          visible={showInviteModal}
-          theme={theme}
-          onClose={() => setShowInviteModal(false)}
-          onCreateInvite={handleCreateInvite}
-          onAcceptInvite={handleAcceptInvite}
-          onCancelInvite={handleCancelInvite}
-          currentInvite={currentInvite}
-          partnerships={partnerships}
-          isLoading={isInviteLoading}
-        />
       </LinearGradient>
     </>
   );
@@ -585,46 +464,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   roomDetails: {
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  partnershipSection: {
-    marginBottom: 24,
-  },
-  partnerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  partnerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  partnerAvatarText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  partnerInfo: {
-    flex: 1,
-  },
-  partnerName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  partnerStatus: {
     fontSize: 14,
     opacity: 0.8,
   },

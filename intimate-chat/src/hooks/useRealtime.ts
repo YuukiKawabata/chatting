@@ -3,7 +3,7 @@ import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supab
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/supabase';
 
-type Message = Database['public']['Tables']['messages']['Row'];
+type CurrentMessage = Database['public']['Tables']['current_messages']['Row'];
 type Reaction = Database['public']['Tables']['reactions']['Row'];
 type TypingStatus = Database['public']['Tables']['typing_status']['Row'];
 type UserPresence = Database['public']['Tables']['user_presence']['Row'];
@@ -173,33 +173,33 @@ export const useRealtime = () => {
     }
   }, []);
 
-  // メッセージ送信（Supabaseデータベース経由）
+  // メッセージ送信（current_messagesテーブル経由）
   const sendMessage = useCallback(async (
     roomId: string, 
     content: string, 
-    messageType: string = 'text',
-    metadata: any = {}
+    messageType: string = 'text'
   ) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
       const { data, error } = await supabase
-        .from('messages')
+        .from('current_messages')
         .insert({
           room_id: roomId,
           sender_id: user.id,
-          content,
+          content: content.trim(),
           message_type: messageType,
-          metadata,
         })
         .select()
         .single();
 
       if (error) throw error;
+      
+      console.log('✅ Message sent successfully:', data);
       return data;
     } catch (error) {
-      console.error('Failed to send message:', error);
+      console.error('❌ Failed to send message:', error);
       throw error;
     }
   }, []);
@@ -281,9 +281,10 @@ export const useRealtime = () => {
         .single();
 
       if (error) throw error;
+      console.log('👍 Reaction sent successfully:', data);
       return data;
     } catch (error) {
-      console.error('Failed to send reaction:', error);
+      console.error('❌ Failed to send reaction:', error);
       throw error;
     }
   }, []);
@@ -305,20 +306,12 @@ export const useRealtime = () => {
         .eq('reaction_type', reactionType);
 
       if (error) throw error;
+      console.log('👎 Reaction removed successfully');
     } catch (error) {
-      console.error('Failed to remove reaction:', error);
+      console.error('❌ Failed to remove reaction:', error);
       throw error;
     }
   }, []);
-
-  // タッチ位置送信（メタデータとしてメッセージで送信）
-  const sendTouchPosition = useCallback(async (
-    roomId: string, 
-    x: number, 
-    y: number
-  ) => {
-    await sendMessage(roomId, '', 'touch', { x, y });
-  }, [sendMessage]);
 
   // プレゼンス状態更新
   const updatePresence = useCallback(async (status: 'online' | 'offline' | 'away') => {
@@ -338,27 +331,91 @@ export const useRealtime = () => {
     }
   }, []);
 
-  // イベントリスナー - メッセージ受信（一時的に無効化）
+  // イベントリスナー - メッセージ受信（修正版）
   const onMessageReceived = useCallback((
     roomId: string,
-    callback: (payload: RealtimePostgresChangesPayload<Message>) => void
+    callback: (payload: RealtimePostgresChangesPayload<any>) => void
   ) => {
-    console.log(`⚠️ Realtime message listening temporarily disabled for room: ${roomId}`);
+    const channelName = `messages:${roomId}`;
     
-    // 空の解除関数を返す
-    return () => {
-      console.log('Realtime message listener unsubscribed (no-op)');
-    };
-  }, []);
+    try {
+      const channel = getOrCreateChannel(channelName);
+      
+      // current_messagesテーブルの変更を監視
+      channel.on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'current_messages',
+          filter: `room_id=eq.${roomId}`
+        },
+        (payload) => {
+          console.log('📨 New message received:', payload);
+          callback(payload);
+        }
+      );
 
-  // イベントリスナー - タイピング更新（一時的に無効化）
+      // チャンネルをサブスクライブ
+      channel.subscribe((status, error) => {
+        console.log(`Messages channel ${roomId} status:`, status, error);
+      });
+
+      addCallback(channelName, callback);
+
+      // 解除関数を返す
+      return () => {
+        console.log(`Unsubscribing from messages channel: ${roomId}`);
+        removeCallback(channelName, callback);
+      };
+    } catch (error) {
+      console.error(`Failed to setup message listener for room ${roomId}:`, error);
+      return () => {};
+    }
+  }, [getOrCreateChannel, addCallback, removeCallback]);
+
+  // イベントリスナー - タイピング更新（修正版）
   const onTypingUpdate = useCallback((
     roomId: string,
     callback: (payload: RealtimePostgresChangesPayload<TypingStatus>) => void
   ) => {
-    console.log(`⚠️ Realtime typing listening temporarily disabled for room: ${roomId}`);
-    return () => {};
-  }, []);
+    const channelName = `typing:${roomId}`;
+    
+    try {
+      const channel = getOrCreateChannel(channelName);
+      
+      // typing_statusテーブルの変更を監視
+      channel.on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE すべて
+          schema: 'public',
+          table: 'typing_status',
+          filter: `room_id=eq.${roomId}`
+        },
+        (payload: RealtimePostgresChangesPayload<TypingStatus>) => {
+          console.log('⌨️ Typing status updated:', payload);
+          callback(payload);
+        }
+      );
+
+      // チャンネルをサブスクライブ
+      channel.subscribe((status, error) => {
+        console.log(`Typing channel ${roomId} status:`, status, error);
+      });
+
+      addCallback(channelName, callback);
+
+      // 解除関数を返す
+      return () => {
+        console.log(`Unsubscribing from typing channel: ${roomId}`);
+        removeCallback(channelName, callback);
+      };
+    } catch (error) {
+      console.error(`Failed to setup typing listener for room ${roomId}:`, error);
+      return () => {};
+    }
+  }, [getOrCreateChannel, addCallback, removeCallback]);
 
   // イベントリスナー - リアクション追加（一時的に無効化）
   const onReactionUpdate = useCallback((
@@ -386,7 +443,6 @@ export const useRealtime = () => {
     stopTyping,
     sendReaction,
     removeReaction,
-    sendTouchPosition,
     updatePresence,
     // イベントリスナー
     onMessageReceived,

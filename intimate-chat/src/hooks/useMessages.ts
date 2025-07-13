@@ -146,12 +146,13 @@ export const useMessages = (roomId: string | null) => {
 
       if (typingData.is_typing && payload.eventType !== 'DELETE') {
         // タイピング開始/更新
-        fetchUserInfo(typingData.user_id).then(userInfo => {
+        if (typingData.user_id) {
+          fetchUserInfo(typingData.user_id).then(userInfo => {
           if (userInfo) {
             setTypingUsers(prev => {
               const newMap = new Map(prev);
-              newMap.set(typingData.user_id, {
-                userId: typingData.user_id,
+              newMap.set(typingData.user_id!, {
+                userId: typingData.user_id!,
                 username: userInfo.display_name || userInfo.username,
                 content: typingData.content_preview || '',
                 startedAt: Date.now(),
@@ -160,11 +161,14 @@ export const useMessages = (roomId: string | null) => {
             });
           }
         });
+        }
       } else {
         // タイピング終了
         setTypingUsers(prev => {
           const newMap = new Map(prev);
-          newMap.delete(typingData.user_id);
+          if (typingData.user_id) {
+            newMap.delete(typingData.user_id);
+          }
           return newMap;
         });
       }
@@ -333,7 +337,7 @@ export const useMessages = (roomId: string | null) => {
   }, [roomId, scheduleMessageRemoval]);
 
   // メッセージ送信
-  const sendMessage = useCallback(async (content: string, messageType: string = 'text', metadata: any = {}) => {
+  const sendMessage = useCallback(async (content: string, messageType: string = 'text') => {
     if (!roomId || !content.trim()) return;
 
     try {
@@ -341,7 +345,7 @@ export const useMessages = (roomId: string | null) => {
       await stopTyping(roomId);
       
       // メッセージ送信
-      const message = await realtimeSendMessage(roomId, content.trim(), messageType, metadata);
+      const message = await realtimeSendMessage(roomId, content.trim(), messageType);
       return message;
     } catch (error: any) {
       setError(error.message || 'メッセージの送信に失敗しました');

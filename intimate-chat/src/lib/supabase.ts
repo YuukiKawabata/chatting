@@ -115,12 +115,41 @@ export type Database = {
           created_at?: string;
         };
       };
+      current_messages: {
+        Row: {
+          id: string;
+          room_id: string | null;
+          sender_id: string | null;
+          content: string;
+          message_type: string;
+          created_at: string;
+          expires_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id?: string | null;
+          sender_id?: string | null;
+          content: string;
+          message_type?: string;
+          created_at?: string;
+          expires_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string | null;
+          sender_id?: string | null;
+          content?: string;
+          message_type?: string;
+          created_at?: string;
+          expires_at?: string;
+        };
+      };
       typing_status: {
         Row: {
           id: string;
           user_id: string | null;
           room_id: string | null;
-          content: string | null;
+          content_preview: string | null;
           is_typing: boolean;
           created_at: string;
           updated_at: string;
@@ -129,7 +158,7 @@ export type Database = {
           id?: string;
           user_id?: string | null;
           room_id?: string | null;
-          content?: string | null;
+          content_preview?: string | null;
           is_typing?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -138,7 +167,7 @@ export type Database = {
           id?: string;
           user_id?: string | null;
           room_id?: string | null;
-          content?: string | null;
+          content_preview?: string | null;
           is_typing?: boolean;
           created_at?: string;
           updated_at?: string;

@@ -151,7 +151,7 @@ export const EnhancedThemeSelector: React.FC<EnhancedThemeSelectorProps> = ({
       >
         {/* テーマプレビューグラデーション */}
         <LinearGradient
-          colors={themeInfo.gradient}
+          colors={themeInfo.gradient as [string, string, ...string[]]}
           style={styles.themePreview}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}

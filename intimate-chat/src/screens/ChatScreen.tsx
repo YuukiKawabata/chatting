@@ -37,7 +37,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
     isConnected, 
     updateTyping, 
     stopTyping,
+    sendMessage,
     onTypingUpdate,
+    onMessageReceived,
     joinRoom,
     leaveRoom,
   } = useRealtime();
@@ -46,6 +48,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
   const [myInput, setMyInput] = useState('');
   const [partnerInput, setPartnerInput] = useState('');
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
 
   // ルーム参加・退出管理
   useEffect(() => {
@@ -71,6 +74,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
     if (!roomId || !user?.id) return;
 
     const typingUnsubscribe = onTypingUpdate(roomId, (payload) => {
+      if (!payload.new || !('user_id' in payload.new)) return;
+      
       const typingData = payload.new;
       
       if (typingData.user_id === user.id) return; // 自分のタイピングは無視
@@ -89,6 +94,34 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
     return typingUnsubscribe;
   }, [roomId, user?.id, onTypingUpdate]);
 
+  // メッセージ受信監視
+  useEffect(() => {
+    if (!roomId || !user?.id) return;
+
+    const messageUnsubscribe = onMessageReceived(roomId, (payload: any) => {
+      if (!payload.new) return;
+      
+      const messageData = payload.new;
+      console.log('📨 New message received:', messageData);
+      
+      // メッセージを一時的に表示リストに追加
+      setMessages(prev => [...prev, {
+        id: messageData.id,
+        content: messageData.content,
+        senderId: messageData.sender_id,
+        createdAt: messageData.created_at,
+        isMine: messageData.sender_id === user.id
+      }]);
+
+      // 1時間後に自動削除（実際のデータベース削除はサーバーサイドで）
+      setTimeout(() => {
+        setMessages(prev => prev.filter(msg => msg.id !== messageData.id));
+      }, 3600000); // 1時間
+    });
+
+    return messageUnsubscribe;
+  }, [roomId, user?.id, onMessageReceived]);
+
   // 自分の入力変更ハンドラー
   const handleMyInputChange = useCallback(async (text: string) => {
     setMyInput(text);
@@ -103,6 +136,19 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
       console.error('Failed to update typing status:', error);
     }
   }, [roomId, updateTyping, stopTyping]);
+
+  // メッセージ送信ハンドラー
+  const handleSendMessage = useCallback(async (message: string) => {
+    if (!message.trim() || !roomId) return;
+
+    try {
+      await sendMessage(roomId, message.trim());
+      setMyInput(''); // 入力をクリア
+      console.log('✅ Message sent successfully');
+    } catch (error) {
+      console.error('❌ Failed to send message:', error);
+    }
+  }, [roomId, sendMessage]);
 
   // 戻るボタンハンドラー
   const handleBack = useCallback(() => {
@@ -120,10 +166,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
   return (
     <>
-      <StatusBar 
-        barStyle={currentTheme === 'cool' ? 'light-content' : 'dark-content'} 
-        backgroundColor={theme.colors.background.primary}
-      />
+      <StatusBar style={currentTheme === 'cool' ? 'light' : 'dark'} />
       
       <LinearGradient
         colors={[
@@ -175,6 +218,44 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
           {/* メインコンテンツエリア */}
           <View style={styles.contentArea}>
+            {/* メッセージ表示エリア */}
+            <View style={styles.messagesArea}>
+              <Text style={[styles.messagesLabel, { color: theme.colors.text.secondary }]}>
+                現在のメッセージ ({messages.length}件)
+              </Text>
+              <View style={[styles.messagesContainer, { backgroundColor: theme.colors.background.card }]}>
+                {messages.length === 0 ? (
+                  <Text style={[styles.emptyMessages, { color: theme.colors.text.secondary }]}>
+                    まだメッセージがありません
+                  </Text>
+                ) : (
+                  messages.map((message) => (
+                    <View 
+                      key={message.id} 
+                      style={[
+                        styles.messageItem,
+                        {
+                          backgroundColor: message.isMine 
+                            ? theme.colors.primary + '20' 
+                            : theme.colors.background.secondary || theme.colors.background.primary,
+                          alignSelf: message.isMine ? 'flex-end' : 'flex-start',
+                        }
+                      ]}
+                    >
+                      <Text style={[styles.messageText, { color: theme.colors.text.primary }]}>
+                        {message.content}
+                      </Text>
+                      <Text style={[styles.messageTime, { color: theme.colors.text.secondary }]}>
+                        {new Date(message.createdAt).toLocaleTimeString('ja-JP', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
             {/* 相手の入力エリア */}
             <View style={styles.inputSection}>
               <Text style={[styles.inputLabel, { color: theme.colors.text.secondary }]}>
@@ -233,6 +314,27 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                   textAlignVertical="top"
                   maxLength={1000}
                 />
+                
+                {/* 送信ボタン */}
+                <TouchableOpacity
+                  style={[
+                    styles.sendButton,
+                    {
+                      backgroundColor: myInput.trim() 
+                        ? theme.colors.primary 
+                        : theme.colors.text.secondary,
+                    }
+                  ]}
+                  onPress={() => handleSendMessage(myInput)}
+                  disabled={!myInput.trim()}
+                  activeOpacity={0.8}
+                >
+                  <Feather 
+                    name="send" 
+                    size={20} 
+                    color="#FFFFFF" 
+                  />
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -293,9 +395,43 @@ const styles = StyleSheet.create({
   contentArea: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingVertical: 40,
-    justifyContent: 'center',
-    gap: 60,
+    paddingVertical: 20,
+    gap: 16,
+  },
+  messagesArea: {
+    flex: 1,
+    gap: 8,
+  },
+  messagesLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  messagesContainer: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 16,
+    maxHeight: 200,
+  },
+  emptyMessages: {
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 20,
+  },
+  messageItem: {
+    maxWidth: '80%',
+    marginVertical: 4,
+    padding: 12,
+    borderRadius: 12,
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  messageTime: {
+    fontSize: 12,
+    opacity: 0.7,
   },
   inputSection: {
     gap: 12,
@@ -318,12 +454,28 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 2,
     padding: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
   },
   textInput: {
     fontSize: 18,
     lineHeight: 24,
     flex: 1,
     textAlignVertical: 'top',
+    maxHeight: 80,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   inputText: {
     fontSize: 18,

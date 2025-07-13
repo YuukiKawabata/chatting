@@ -10,7 +10,6 @@ import {
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Theme } from '../types';
-import { useFileUpload } from '../hooks/useFileUpload';
 
 interface InputAreaProps {
   theme: Theme;
@@ -36,7 +35,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
   const [message, setMessage] = useState('');
   const inputRef = useRef<TextInput>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const { showUploadOptions, isUploading, uploadProgress } = useFileUpload();
 
   const handleSendPress = () => {
     if (message.trim() && !disabled) {
@@ -75,12 +73,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
     handleSendPress();
   };
 
-  const handleFileUpload = () => {
-    if (!roomId || disabled || isUploading) return;
-    
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    showUploadOptions(roomId);
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background.card }]}>
@@ -114,47 +106,12 @@ export const InputArea: React.FC<InputAreaProps> = ({
         </View>
       </View>
 
-      {/* Upload Progress Display */}
-      {isUploading && uploadProgress && (
-        <View style={[styles.progressContainer, { backgroundColor: theme.colors.background.primary }]}>
-          <Text style={[styles.progressText, { color: theme.colors.text.primary }]}>
-            アップロード中... {uploadProgress.percentage}%
-          </Text>
-          <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
-            <View 
-              style={[
-                styles.progressFill, 
-                { 
-                  backgroundColor: theme.colors.primary,
-                  width: `${uploadProgress.percentage}%`,
-                }
-              ]} 
-            />
-          </View>
-        </View>
-      )}
-
       {/* Input Field */}
       <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
-        {/* File Upload Button */}
-        <TouchableOpacity
-          style={[
-            styles.attachButton,
-            { 
-              backgroundColor: theme.colors.background.primary,
-              borderColor: theme.colors.border,
-            }
-          ]}
-          onPress={handleFileUpload}
-          disabled={disabled || isUploading}
-          activeOpacity={0.8}
-        >
-          <Feather 
-            name={isUploading ? "upload-cloud" : "paperclip"} 
-            size={20} 
-            color={disabled || isUploading ? theme.colors.text.secondary : theme.colors.primary} 
-          />
-        </TouchableOpacity>
+        {/* Current Input Display */}
+        <Text style={[styles.inputLabel, { color: theme.colors.text.secondary }]}>
+          あなたの入力:
+        </Text>
 
         <TextInput
           ref={inputRef}
@@ -174,7 +131,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
           placeholderTextColor={theme.colors.text.secondary}
           multiline
           maxLength={1000}
-          editable={!disabled && !isUploading}
+          editable={!disabled}
           returnKeyType="send"
           blurOnSubmit={false}
           scrollEnabled={false}
@@ -185,13 +142,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
             style={[
               styles.sendButton,
               {
-                backgroundColor: message.trim() && !disabled && !isUploading
+                backgroundColor: message.trim() && !disabled
                   ? theme.colors.primary 
                   : theme.colors.text.secondary,
               }
             ]}
             onPress={handleSendPress}
-            disabled={!message.trim() || disabled || isUploading}
+            disabled={!message.trim() || disabled}
             activeOpacity={0.8}
           >
             <Feather 
