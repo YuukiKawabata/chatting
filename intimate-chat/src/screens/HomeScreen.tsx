@@ -17,7 +17,12 @@ import * as Haptics from 'expo-haptics';
 
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { EnhancedThemeSelector, CreateRoomModal } from '../components';
+import { usePresence } from '../hooks/usePresence';
+import { EnhancedThemeSelector, EnhancedCreateRoomModal } from '../components';
+import { PartnerInviteModal } from '../components/PartnerInviteModal';
+import { JoinByCodeModal } from '../components/JoinByCodeModal';
+import { RandomMatchModal } from '../components/RandomMatchModal';
+import { PartnersList } from '../components/PartnersList';
 import { supabase } from '../lib/supabase';
 import { roomService, ChatRoom } from '../services/roomService';
 
@@ -31,9 +36,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showThemeSelector, setShowThemeSelector] = useState(false);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [showPartnerInviteModal, setShowPartnerInviteModal] = useState(false);
+  const [showJoinByCodeModal, setShowJoinByCodeModal] = useState(false);
+  const [showRandomMatchModal, setShowRandomMatchModal] = useState(false);
+  const [selectedRoomForInvite, setSelectedRoomForInvite] = useState<ChatRoom | null>(null);
+  const [activeTab, setActiveTab] = useState<'rooms' | 'partners'>('rooms');
 
   const { user, logout } = useAuth();
   const { theme, currentTheme, changeTheme } = useTheme();
+  
+  // オンライン状態管理を開始
+  usePresence();
 
   // ユーザー表示名の取得
   const displayName = user?.user_metadata?.display_name || 
@@ -71,9 +84,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
   };
 
   // ルーム作成処理
-  const handleCreateRoom = async (roomName: string) => {
+  const handleCreateRoom = async (roomName: string, roomType: 'public' | 'private' | 'partner' = 'private') => {
     try {
-      console.log('Creating room with name:', roomName);
+      console.log('Creating room with name:', roomName, 'type:', roomType);
       const result = await roomService.createRoom(roomName.trim());
       
       if (result.success) {
@@ -115,6 +128,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
       const errorMessage = error instanceof Error ? error.message : 'ルームへの参加に失敗しました';
       Alert.alert('エラー', errorMessage);
     }
+  };
+
+  // パートナー招待モーダルを開く
+  const openInviteModal = (room: ChatRoom) => {
+    setSelectedRoomForInvite(room);
+    setShowPartnerInviteModal(true);
+  };
+
+  // ランダムマッチングからルームに移動
+  const handleMatchFound = (roomId: string) => {
+    onJoinRoom(roomId);
+    loadRooms(); // ルーム一覧を更新
+  };
+
+  // 招待コードでルームに移動
+  const handleRoomJoined = (roomId: string) => {
+    onJoinRoom(roomId);
+    loadRooms(); // ルーム一覧を更新
   };
 
 
@@ -220,23 +251,98 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
               </Text>
             </View>
 
-
-            {/* Create Room Button */}
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={handleCreateRoomPress}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={[theme.colors.primary, theme.colors.secondary]}
-                style={styles.createButtonGradient}
+            {/* Tab Navigation */}
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.tabButton,
+                  { backgroundColor: activeTab === 'rooms' ? theme.colors.primary : theme.colors.background.card }
+                ]}
+                onPress={() => setActiveTab('rooms')}
+                activeOpacity={0.8}
               >
-                <Feather name="plus" size={20} color="#FFFFFF" />
-                <Text style={styles.createButtonText}>新しいルームを作成</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <Feather 
+                  name="home" 
+                  size={18} 
+                  color={activeTab === 'rooms' ? '#FFFFFF' : theme.colors.text.primary} 
+                />
+                <Text style={[
+                  styles.tabButtonText,
+                  { color: activeTab === 'rooms' ? '#FFFFFF' : theme.colors.text.primary }
+                ]}>
+                  ルーム
+                </Text>
+              </TouchableOpacity>
 
-            {/* Rooms List */}
+              <TouchableOpacity
+                style={[
+                  styles.tabButton,
+                  { backgroundColor: activeTab === 'partners' ? theme.colors.primary : theme.colors.background.card }
+                ]}
+                onPress={() => setActiveTab('partners')}
+                activeOpacity={0.8}
+              >
+                <Feather 
+                  name="users" 
+                  size={18} 
+                  color={activeTab === 'partners' ? '#FFFFFF' : theme.colors.text.primary} 
+                />
+                <Text style={[
+                  styles.tabButtonText,
+                  { color: activeTab === 'partners' ? '#FFFFFF' : theme.colors.text.primary }
+                ]}>
+                  パートナー
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Action Buttons - ルームタブでのみ表示 */}
+            {activeTab === 'rooms' && (
+            <View style={styles.actionButtonsContainer}>
+              {/* Create Room Button */}
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={handleCreateRoomPress}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={[theme.colors.primary, theme.colors.secondary]}
+                  style={styles.createButtonGradient}
+                >
+                  <Feather name="plus" size={20} color="#FFFFFF" />
+                  <Text style={styles.createButtonText}>新しいルーム</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Join by Code Button */}
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.colors.background.card }]}
+                onPress={() => setShowJoinByCodeModal(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="key" size={20} color={theme.colors.primary} />
+                <Text style={[styles.actionButtonText, { color: theme.colors.text.primary }]}>
+                  招待コードで参加
+                </Text>
+              </TouchableOpacity>
+
+              {/* Random Match Button */}
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.colors.background.card }]}
+                onPress={() => setShowRandomMatchModal(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="shuffle" size={20} color={theme.colors.secondary} />
+                <Text style={[styles.actionButtonText, { color: theme.colors.text.primary }]}>
+                  ランダムマッチング
+                </Text>
+              </TouchableOpacity>
+            </View>
+            )}
+
+            {/* Content Area */}
+            {activeTab === 'rooms' ? (
+            /* Rooms List */
             <View style={styles.roomsSection}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
                 ルーム一覧
@@ -261,25 +367,46 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
                 </View>
               ) : (
                 rooms.map((room) => (
-                  <TouchableOpacity
-                    key={room.id}
-                    style={[styles.roomCard, { backgroundColor: theme.colors.background.card }]}
-                    onPress={() => joinRoom(room.id, room.name)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.roomInfo}>
-                      <Text style={[styles.roomName, { color: theme.colors.text.primary }]}>
-                        {room.name}
-                      </Text>
-                      <Text style={[styles.roomDetails, { color: theme.colors.text.secondary }]}>
-                        {room.participant_count} 人参加 • {new Date(room.created_at).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <Feather name="chevron-right" size={20} color={theme.colors.text.secondary} />
-                  </TouchableOpacity>
+                  <View key={room.id} style={[styles.roomCard, { backgroundColor: theme.colors.background.card }]}>
+                    <TouchableOpacity
+                      style={styles.roomMainArea}
+                      onPress={() => joinRoom(room.id, room.name)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.roomInfo}>
+                        <Text style={[styles.roomName, { color: theme.colors.text.primary }]}>
+                          {room.name}
+                        </Text>
+                        <Text style={[styles.roomDetails, { color: theme.colors.text.secondary }]}>
+                          {room.participant_count} 人参加 • {new Date(room.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-right" size={20} color={theme.colors.text.secondary} />
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[styles.inviteButton, { backgroundColor: theme.colors.primary }]}
+                      onPress={() => openInviteModal(room)}
+                      activeOpacity={0.8}
+                    >
+                      <Feather name="share" size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
                 ))
               )}
             </View>
+            ) : (
+            /* Partners List */
+            <View style={styles.partnersSection}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text.primary }]}>
+                パートナー一覧
+              </Text>
+              <PartnersList 
+                onStartChat={onJoinRoom}
+                onRefresh={loadRooms}
+              />
+            </View>
+            )}
           </ScrollView>
         </SafeAreaView>
 
@@ -292,12 +419,39 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onJoinRoom }) => {
           onClose={() => setShowThemeSelector(false)}
         />
 
-        {/* Create Room Modal */}
-        <CreateRoomModal
+        {/* Enhanced Create Room Modal */}
+        <EnhancedCreateRoomModal
           visible={showCreateRoomModal}
           theme={theme}
           onClose={() => setShowCreateRoomModal(false)}
           onCreateRoom={handleCreateRoom}
+        />
+
+        {/* Partner Invite Modal */}
+        {selectedRoomForInvite && (
+          <PartnerInviteModal
+            visible={showPartnerInviteModal}
+            onClose={() => {
+              setShowPartnerInviteModal(false);
+              setSelectedRoomForInvite(null);
+            }}
+            roomId={selectedRoomForInvite.id}
+            roomName={selectedRoomForInvite.name}
+          />
+        )}
+
+        {/* Join by Code Modal */}
+        <JoinByCodeModal
+          visible={showJoinByCodeModal}
+          onClose={() => setShowJoinByCodeModal(false)}
+          onRoomJoined={handleRoomJoined}
+        />
+
+        {/* Random Match Modal */}
+        <RandomMatchModal
+          visible={showRandomMatchModal}
+          onClose={() => setShowRandomMatchModal(false)}
+          onMatchFound={handleMatchFound}
         />
 
       </LinearGradient>
@@ -388,10 +542,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  actionButtonsContainer: {
+    marginBottom: 24,
+    gap: 12,
+  },
   createButton: {
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -411,7 +568,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  actionButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 20,
+    gap: 4,
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 6,
+  },
+  tabButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   roomsSection: {
+    marginBottom: 20,
+  },
+  partnersSection: {
     marginBottom: 20,
   },
   sectionTitle: {
@@ -447,16 +647,30 @@ const styles = StyleSheet.create({
   roomCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
     borderRadius: 12,
     marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
     elevation: 2,
+    overflow: 'hidden',
+  },
+  roomMainArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
   },
   roomInfo: {
     flex: 1,
+  },
+  inviteButton: {
+    width: 48,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
   },
   roomName: {
     fontSize: 16,

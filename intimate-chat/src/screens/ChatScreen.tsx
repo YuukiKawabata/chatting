@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '../hooks/useAuth';
 import { useRealtime } from '../hooks/useRealtime';
 import { useTheme } from '../hooks/useTheme';
+import { EnhancedReactionPicker } from '../components/EnhancedReactionPicker';
 
 // デモ用のルームID
 const DEMO_ROOM_ID = '00000000-0000-0000-0000-000000000001';
@@ -49,6 +50,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
   const [partnerInput, setPartnerInput] = useState('');
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   // ルーム参加・退出管理
   useEffect(() => {
@@ -164,6 +167,26 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
     logout();
   }, [logout]);
 
+  // リアクションハンドラー
+  const handleReaction = useCallback((messageId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedMessageId(messageId);
+    setShowReactionPicker(true);
+  }, []);
+
+  // リアクション追加ハンドラー
+  const handleReactionAdded = useCallback(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setShowReactionPicker(false);
+    setSelectedMessageId(null);
+  }, []);
+
+  // リアクションピッカーを閉じる
+  const handleCloseReactionPicker = useCallback(() => {
+    setShowReactionPicker(false);
+    setSelectedMessageId(null);
+  }, []);
+
   return (
     <>
       <StatusBar style={currentTheme === 'cool' ? 'light' : 'dark'} />
@@ -230,7 +253,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                   </Text>
                 ) : (
                   messages.map((message) => (
-                    <View 
+                    <TouchableOpacity
                       key={message.id} 
                       style={[
                         styles.messageItem,
@@ -241,6 +264,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                           alignSelf: message.isMine ? 'flex-end' : 'flex-start',
                         }
                       ]}
+                      onLongPress={() => handleReaction(message.id)}
+                      activeOpacity={0.7}
                     >
                       <Text style={[styles.messageText, { color: theme.colors.text.primary }]}>
                         {message.content}
@@ -251,7 +276,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                           minute: '2-digit' 
                         })}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   ))
                 )}
               </View>
@@ -353,6 +378,16 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
             { backgroundColor: theme.colors.secondary + '10' }
           ]} 
         />
+
+        {/* リアクションピッカーモーダル */}
+        {selectedMessageId && (
+          <EnhancedReactionPicker
+            messageId={selectedMessageId}
+            visible={showReactionPicker}
+            onClose={handleCloseReactionPicker}
+            onReactionAdded={handleReactionAdded}
+          />
+        )}
       </LinearGradient>
     </>
   );

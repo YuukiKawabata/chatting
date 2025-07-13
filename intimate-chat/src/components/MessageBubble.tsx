@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { Database } from '../lib/supabase';
+import { reactionService, ReactionSummary } from '../services/reactionService';
 
 // Supabaseデータベース型定義
 type Message = {
@@ -60,6 +61,30 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   theme,
   onReaction,
 }) => {
+  const [reactionSummaries, setReactionSummaries] = useState<ReactionSummary[]>([]);
+
+  useEffect(() => {
+    // 初期リアクション情報を読み込み
+    loadReactions();
+
+    // リアルタイムでリアクションの変更を監視
+    const subscription = reactionService.subscribeToReactions(message.id, (reactions) => {
+      setReactionSummaries(reactions);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [message.id]);
+
+  const loadReactions = async () => {
+    try {
+      const reactions = await reactionService.getReactionSummary(message.id);
+      setReactionSummaries(reactions);
+    } catch (error) {
+      console.error('Error loading reactions:', error);
+    }
+  };
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('ja-JP', { 
@@ -86,44 +111,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
   };
 
-  const getReactionEmoji = (type: string) => {
-    const emojis: Record<string, string> = {
-      heart: '❤️',
-      smile: '😊',
-      lightning: '⚡',
-      coffee: '☕',
-      star: '⭐',
-      like: '👍',
-      love: '💕',
-      laugh: '😂',
-      wow: '😮',
-      sad: '😢',
-      angry: '😠'
-    };
-    return emojis[type] || '👍';
-  };
-
-  // リアクションを集計
-  const aggregateReactions = () => {
-    if (!message.reactions || message.reactions.length === 0) return [];
-
-    const reactionMap = new Map<string, { type: string; count: number; users: string[] }>();
-
-    message.reactions.forEach(reaction => {
-      const existing = reactionMap.get(reaction.reaction_type);
-      if (existing) {
-        existing.count++;
-        if (reaction.user_id) existing.users.push(reaction.user_id);
-      } else {
-        reactionMap.set(reaction.reaction_type, {
-          type: reaction.reaction_type,
-          count: 1,
-          users: reaction.user_id ? [reaction.user_id] : []
-        });
-      }
-    });
-
-    return Array.from(reactionMap.values());
+  const formatUserList = (users: ReactionSummary['users']): string => {
+    if (users.length === 0) return '';
+    if (users.length === 1) return users[0].display_name;
+    if (users.length === 2) return `${users[0].display_name}、${users[1].display_name}`;
+    return `${users[0].display_name}、${users[1].display_name} 他${users.length - 2}人`;
   };
 
   const renderMessageContent = () => {
@@ -175,8 +167,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     alignSelf: isOwn ? 'flex-end' as const : 'flex-start' as const,
   };
 
-  const reactions = aggregateReactions();
-
   return (
     <View style={[styles.container, { alignItems: isOwn ? 'flex-end' : 'flex-start' }]}>
       <TouchableOpacity
@@ -208,22 +198,40 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         )}
 
         {/* リアクション表示 */}
-        {reactions.length > 0 && (
+        {reactionSummaries.length > 0 && (
           <View style={[styles.reactionsContainer, { alignSelf: isOwn ? 'flex-end' : 'flex-start' }]}>
-            {reactions.map((reaction) => (
+            {reactionSummaries.map((reaction) => (
               <TouchableOpacity
-                key={reaction.type}
+                key={reaction.reaction_type}
                 style={[
                   styles.reactionBubble,
-                  { backgroundColor: theme.colors.background.card, borderColor: theme.colors.border }
+                  { 
+                    backgroundColor: reaction.currentUserReacted 
+                      ? `${theme.colors.primary}20` 
+                      : theme.colors.background.card,
+                    borderColor: reaction.currentUserReacted 
+                      ? theme.colors.primary 
+                      : theme.colors.border 
+                  }
                 ]}
                 onPress={() => onReaction?.(message.id)}
+                onLongPress={() => {
+                  // ツールチップでユーザーリストを表示（将来の実装）
+                  console.log(`Reacted users: ${formatUserList(reaction.users)}`);
+                }}
               >
                 <Text style={styles.reactionEmoji}>
-                  {getReactionEmoji(reaction.type)}
+                  {reactionService.reactionEmojis[reaction.reaction_type]}
                 </Text>
                 {reaction.count > 1 && (
-                  <Text style={[styles.reactionCount, { color: theme.colors.text.secondary }]}>
+                  <Text style={[
+                    styles.reactionCount, 
+                    { 
+                      color: reaction.currentUserReacted 
+                        ? theme.colors.primary 
+                        : theme.colors.text.secondary 
+                    }
+                  ]}>
                     {reaction.count}
                   </Text>
                 )}
